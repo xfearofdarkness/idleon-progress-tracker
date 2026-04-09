@@ -4,9 +4,12 @@ default_account = "A_speed"
 
 [accounts.A_speed]
 # save_path = "/absolute/path/to/leveldb"
+# save_account = "mySave"
 
 [accounts.B_skills]
 # save_path = "/absolute/path/to/leveldb"
+# save_account = "mySave"
 
 [accounts.C_balanced]
 # save_path = "/absolute/path/to/leveldb"
+# save_account = "mySave"

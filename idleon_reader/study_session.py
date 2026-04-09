@@ -13,6 +13,7 @@ from typing import Optional
 from .export_tidy import ExportResult, export_tidy_csvs
 from .finder import find_save_directory
 from .ldb_reader import read_save_data
+from .save_accounts import SaveAccountSelectionError, select_save_account
 from .study_config import StudyAccountProfile, StudyConfig, StudyConfigError, resolve_account
 
 
@@ -27,6 +28,7 @@ class StudySessionState:
     study_group: str
     session_id: str
     save_path: str
+    save_account: str
     export_dir: str
     started_at: str
     last_export_at: str
@@ -55,6 +57,7 @@ def load_session_state(repo_root: Path) -> Optional[StudySessionState]:
     if not path.exists():
         return None
     data = json.loads(path.read_text(encoding="utf-8"))
+    data.setdefault("save_account", "")
     return StudySessionState(**data)
 
 
@@ -88,6 +91,10 @@ def save_path_for_account(account: StudyAccountProfile, override: str = "") -> P
             "Kein Save-Pfad konfiguriert und keine automatische IdleOn-Erkennung moeglich."
         )
     return detected
+
+
+def save_account_for_account(account: StudyAccountProfile, override: str = "") -> str:
+    return (override or account.save_account).strip()
 
 
 def _read_session_ids(snapshots_csv: Path) -> list[str]:
@@ -138,11 +145,12 @@ def validate_milestone_tags(config: StudyConfig, tags: list[str]) -> list[str]:
 def _perform_export(
     *,
     save_path: Path,
+    save_account: str,
     output_dir: Path,
     append: bool,
     dry_run: bool,
     metadata: dict,
-) -> ExportResult:
+) -> tuple[ExportResult, str]:
     if not save_path.exists():
         raise StudySessionError(f"Save-Pfad existiert nicht: {save_path}")
     if not save_path.is_dir():
@@ -150,14 +158,24 @@ def _perform_export(
     raw_data = read_save_data(save_path)
     if not raw_data:
         raise StudySessionError("Keine Daten im Save gefunden.")
-    return export_tidy_csvs(
-        raw_data,
+    try:
+        selected_data, selected_candidate, _candidates = select_save_account(
+            raw_data,
+            selector=save_account,
+            allow_prompt=True,
+        )
+    except SaveAccountSelectionError as exc:
+        raise StudySessionError(str(exc)) from exc
+    result = export_tidy_csvs(
+        selected_data,
         output_dir=output_dir,
         source_path=str(save_path),
         append=append,
         dry_run=dry_run,
         metadata=metadata,
     )
+    resolved_selector = selected_candidate.selector if selected_candidate is not None else save_account.strip()
+    return result, resolved_selector
 
 
 def baseline_export(
@@ -167,6 +185,7 @@ def baseline_export(
     notes: str = "",
     tags: Optional[list[str]] = None,
     save_path_override: str = "",
+    save_account_override: str = "",
     output_dir_override: str = "",
     study_group_override: str = "",
     dry_run: bool = False,
@@ -174,6 +193,7 @@ def baseline_export(
     account = resolve_account(config, account_name)
     chosen_tags = validate_tags(config, tags or [])
     save_path = save_path_for_account(account, save_path_override)
+    save_account = save_account_for_account(account, save_account_override)
     output_dir = export_dir_for_account(config, account, output_dir_override)
     metadata = {
         "account_label": account.account_label,
@@ -185,13 +205,15 @@ def baseline_export(
         "playtime_minutes_since_last_snapshot": "",
         "tags": chosen_tags,
     }
-    return _perform_export(
+    result, _resolved_save_account = _perform_export(
         save_path=save_path,
+        save_account=save_account,
         output_dir=output_dir,
         append=False,
         dry_run=dry_run,
         metadata=metadata,
     )
+    return result
 
 
 def session_start(
@@ -201,6 +223,7 @@ def session_start(
     notes: str = "",
     tags: Optional[list[str]] = None,
     save_path_override: str = "",
+    save_account_override: str = "",
     output_dir_override: str = "",
     study_group_override: str = "",
     dry_run: bool = False,
@@ -212,6 +235,7 @@ def session_start(
     account = resolve_account(config, account_name)
     extra_tags = validate_tags(config, tags or [])
     save_path = save_path_for_account(account, save_path_override)
+    save_account = save_account_for_account(account, save_account_override)
     output_dir = export_dir_for_account(config, account, output_dir_override)
     session_id = next_session_id(account.account_label, output_dir, now=now)
     metadata = {
@@ -224,8 +248,9 @@ def session_start(
         "playtime_minutes_since_last_snapshot": "",
         "tags": ["session_start", *extra_tags],
     }
-    result = _perform_export(
+    result, resolved_save_account = _perform_export(
         save_path=save_path,
+        save_account=save_account,
         output_dir=output_dir,
         append=False,
         dry_run=dry_run,
@@ -238,6 +263,7 @@ def session_start(
         study_group=metadata["study_group"],
         session_id=session_id,
         save_path=str(save_path),
+        save_account=resolved_save_account,
         export_dir=str(output_dir),
         started_at=started_at,
         last_export_at=result.timestamp,
@@ -275,8 +301,9 @@ def checkpoint_export(
         "playtime_minutes_since_last_snapshot": "" if playtime_minutes is None else playtime_minutes,
         "tags": chosen_tags,
     }
-    result = _perform_export(
+    result, _resolved_save_account = _perform_export(
         save_path=Path(state.save_path),
+        save_account=state.save_account,
         output_dir=Path(state.export_dir),
         append=True,
         dry_run=dry_run,
@@ -309,8 +336,9 @@ def milestone_export(
         "playtime_minutes_since_last_snapshot": "" if playtime_minutes is None else playtime_minutes,
         "tags": chosen_tags,
     }
-    result = _perform_export(
+    result, _resolved_save_account = _perform_export(
         save_path=Path(state.save_path),
+        save_account=state.save_account,
         output_dir=Path(state.export_dir),
         append=True,
         dry_run=dry_run,
@@ -343,8 +371,9 @@ def session_end(
         "playtime_minutes_since_last_snapshot": "" if playtime_minutes is None else playtime_minutes,
         "tags": ["session_end", *chosen_tags],
     }
-    result = _perform_export(
+    result, _resolved_save_account = _perform_export(
         save_path=Path(state.save_path),
+        save_account=state.save_account,
         output_dir=Path(state.export_dir),
         append=True,
         dry_run=dry_run,

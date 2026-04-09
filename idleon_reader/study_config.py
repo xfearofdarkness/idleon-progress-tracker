@@ -22,6 +22,7 @@ class StudyAccountProfile:
     strategy_label: str
     export_subdir: str
     save_path: str = ""
+    save_account: str = ""
 
 
 @dataclass(frozen=True)
@@ -116,12 +117,15 @@ default_account = "A_speed"
 
 [accounts.A_speed]
 # save_path = "/absolute/path/to/leveldb"
+# save_account = "mySave"
 
 [accounts.B_skills]
 # save_path = "/absolute/path/to/leveldb"
+# save_account = "mySave"
 
 [accounts.C_balanced]
 # save_path = "/absolute/path/to/leveldb"
+# save_account = "mySave"
 """
 
 
@@ -197,13 +201,16 @@ def load_study_config(repo_root: Optional[Path] = None) -> StudyConfig:
             )
         local_profile = local_accounts.get(profile_name, {})
         save_path = ""
+        save_account = ""
         if isinstance(local_profile, dict):
             save_path = str(local_profile.get("save_path", "")).strip()
+            save_account = str(local_profile.get("save_account", "")).strip()
         accounts[profile_name] = StudyAccountProfile(
             account_label=account_label,
             strategy_label=strategy_label,
             export_subdir=export_subdir,
             save_path=save_path,
+            save_account=save_account,
         )
 
     default_account = str(local_defaults.get("default_account", "")).strip()

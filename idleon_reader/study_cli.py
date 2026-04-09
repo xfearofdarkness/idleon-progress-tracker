@@ -41,15 +41,33 @@ def create_study_parser() -> argparse.ArgumentParser:
     session_start_parser.set_defaults(handler=cmd_session_start)
 
     checkpoint_parser = subparsers.add_parser("checkpoint", help="Schreibe einen Checkpoint fuer die aktive Session.")
-    _add_shared_export_arguments(checkpoint_parser, allow_save_path=False, allow_output_dir=False, allow_study_group=False)
+    _add_shared_export_arguments(
+        checkpoint_parser,
+        allow_save_path=False,
+        allow_save_account=False,
+        allow_output_dir=False,
+        allow_study_group=False,
+    )
     checkpoint_parser.set_defaults(handler=cmd_checkpoint)
 
     milestone_parser = subparsers.add_parser("milestone", help="Schreibe einen Milestone-Snapshot fuer die aktive Session.")
-    _add_shared_export_arguments(milestone_parser, allow_save_path=False, allow_output_dir=False, allow_study_group=False)
+    _add_shared_export_arguments(
+        milestone_parser,
+        allow_save_path=False,
+        allow_save_account=False,
+        allow_output_dir=False,
+        allow_study_group=False,
+    )
     milestone_parser.set_defaults(handler=cmd_milestone)
 
     session_end_parser = subparsers.add_parser("session-end", help="Beende die aktive Session mit dem letzten Snapshot.")
-    _add_shared_export_arguments(session_end_parser, allow_save_path=False, allow_output_dir=False, allow_study_group=False)
+    _add_shared_export_arguments(
+        session_end_parser,
+        allow_save_path=False,
+        allow_save_account=False,
+        allow_output_dir=False,
+        allow_study_group=False,
+    )
     session_end_parser.set_defaults(handler=cmd_session_end)
 
     return parser
@@ -60,11 +78,18 @@ def _add_shared_export_arguments(
     *,
     allow_playtime: bool = True,
     allow_save_path: bool = True,
+    allow_save_account: bool = True,
     allow_output_dir: bool = True,
     allow_study_group: bool = True,
 ) -> None:
     if allow_save_path:
         parser.add_argument("--save-path", default="", help="Optionaler Override fuer den Save-Pfad.")
+    if allow_save_account:
+        parser.add_argument(
+            "--save-account",
+            default="",
+            help="Optionaler selector oder Index, falls ein Save mehrere Accounts enthaelt.",
+        )
     if allow_output_dir:
         parser.add_argument("--output-dir", default="", help="Optionaler Override fuer den Zielordner.")
     if allow_study_group:
@@ -141,6 +166,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(f"    Studiengruppe: {state.study_group}")
     print(f"    Session-ID: {state.session_id}")
     print(f"    Save-Pfad: {state.save_path}")
+    if state.save_account:
+        print(f"    Save-Account: {state.save_account}")
     print(f"    Exportpfad: {state.export_dir}")
     print(f"    Gestartet: {state.started_at}")
     print(f"    Letzter Export: {state.last_export_at}")
@@ -159,11 +186,14 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         notes=args.notes,
         tags=args.tag,
         save_path_override=args.save_path,
+        save_account_override=args.save_account,
         output_dir_override=args.output_dir,
         study_group_override=args.study_group,
         dry_run=args.dry_run,
     )
     _print_export_summary(result)
+    if args.save_account:
+        print(f"[*] Save-Account: {args.save_account}")
     return 0
 
 
@@ -175,11 +205,14 @@ def cmd_session_start(args: argparse.Namespace) -> int:
         notes=args.notes,
         tags=args.tag,
         save_path_override=args.save_path,
+        save_account_override=args.save_account,
         output_dir_override=args.output_dir,
         study_group_override=args.study_group,
         dry_run=args.dry_run,
     )
     _print_export_summary(result)
+    if state.save_account:
+        print(f"[*] Save-Account: {state.save_account}")
     if not args.dry_run:
         print(f"[*] Aktive Session: {state.session_id}")
     return 0

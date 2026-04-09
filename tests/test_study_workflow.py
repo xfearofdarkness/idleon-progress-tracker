@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -58,7 +59,65 @@ def _sample_save_data():
     }
 
 
-def _write_study_files(root, save_path):
+def _sample_multi_save_data():
+    return {
+        "save_a": {
+            "Money": 111,
+            "PlayerDATABASE": {
+                "Alpha": {
+                    "CharacterClass": 1,
+                    "Lv0": [2, 1, 0],
+                    "Exp0": [4.5, 10, 20],
+                    "ExpReq0": [44.0, 15, 25],
+                    "CurrentMap": 1,
+                    "AFKtarget": "mushG",
+                    "PlayerHP": 20.5,
+                    "PlayerMP": 11,
+                    "Money": 10,
+                    "InventorySlotsOwned": 16,
+                    "SkillLevels": [3, 5, 0, 0, 1],
+                    "InventoryOrder": ["EquipmentHats73"],
+                    "ItemQuantity": [1],
+                    "ItemMap": [{"rarity": "common"}],
+                    "EquipmentOrder": [["EquipmentHats73"], ["Blank"], ["Blank"]],
+                    "EquipmentQuantity": [[1], [0], [0]],
+                    "EquipmentMap": [[{"defence": 1}], [{}], [{}]],
+                    "QuestStatus": {"Scripticus2": [3]},
+                    "QuestComplete": {"Scripticus2": 0},
+                }
+            },
+        },
+        "save_b": {
+            "Money": 222,
+            "PlayerDATABASE": {
+                "Beta": {
+                    "CharacterClass": 2,
+                    "Lv0": [7, 1, 0],
+                    "Exp0": [14.5, 10, 20],
+                    "ExpReq0": [44.0, 15, 25],
+                    "CurrentMap": 2,
+                    "AFKtarget": "frogG",
+                    "PlayerHP": 40.5,
+                    "PlayerMP": 21,
+                    "Money": 20,
+                    "InventorySlotsOwned": 16,
+                    "SkillLevels": [4, 6, 0, 0, 1],
+                    "InventoryOrder": ["EquipmentShirts7"],
+                    "ItemQuantity": [2],
+                    "ItemMap": [{"rarity": "rare"}],
+                    "EquipmentOrder": [["EquipmentShirts7"], ["Blank"], ["Blank"]],
+                    "EquipmentQuantity": [[1], [0], [0]],
+                    "EquipmentMap": [[{"defence": 2}], [{}], [{}]],
+                    "QuestStatus": {"Scripticus2": [2]},
+                    "QuestComplete": {"Scripticus2": 0},
+                }
+            },
+        },
+    }
+
+
+def _write_study_files(root: Path, save_path: Path, save_account: str = ""):
+    save_account_line = f'save_account = "{save_account}"\n' if save_account else ""
     (root / "study_profiles.toml").write_text(
         """[study]
 default_export_root = "exports/study"
@@ -85,7 +144,7 @@ default_account = "A_speed"
 
 [accounts.A_speed]
 save_path = "{save_path.as_posix()}"
-""",
+{save_account_line}""",
         encoding="utf-8",
     )
 
@@ -93,11 +152,12 @@ save_path = "{save_path.as_posix()}"
 def test_load_study_config_and_examples(tmp_path):
     fake_save = tmp_path / "fake-save"
     fake_save.mkdir()
-    _write_study_files(tmp_path, fake_save)
+    _write_study_files(tmp_path, fake_save, save_account="save_a")
 
     config = load_study_config(tmp_path)
     assert config.default_account == "A_speed"
     assert config.accounts["A_speed"].save_path == fake_save.as_posix()
+    assert config.accounts["A_speed"].save_account == "save_a"
 
     created = ensure_example_files(tmp_path)
     assert "study_profiles.toml.example" in created
@@ -232,3 +292,51 @@ def test_study_status_reports_active_and_inactive(tmp_path, monkeypatch):
     active = study_status(config)
     assert active.active is True
     assert active.state.account_label == "A_speed"
+
+
+def test_baseline_export_can_select_specific_save_account(tmp_path, monkeypatch):
+    fake_save = tmp_path / "fake-save"
+    fake_save.mkdir()
+    _write_study_files(tmp_path, fake_save, save_account="save_b")
+    config = load_study_config(tmp_path)
+
+    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_multi_save_data())
+
+    baseline_export(config, account_name="A_speed", tags=["baseline"])
+
+    with open(tmp_path / "exports" / "study" / "A_speed" / "characters.csv", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows[0]["char_name"] == "Beta"
+
+
+def test_session_state_persists_selected_save_account(tmp_path, monkeypatch):
+    fake_save = tmp_path / "fake-save"
+    fake_save.mkdir()
+    _write_study_files(tmp_path, fake_save)
+    config = load_study_config(tmp_path)
+
+    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_multi_save_data())
+
+    start_result, start_state = session_start(
+        config,
+        account_name="A_speed",
+        save_account_override="save_b",
+        tags=[],
+        now=datetime(2026, 4, 9, 9, 0, 0),
+    )
+    assert start_result.study_metadata["session_id"] == "A_speed-20260409-s01"
+    assert start_state.save_account == "save_b"
+    assert load_session_state(tmp_path).save_account == "save_b"
+
+    checkpoint_result, checkpoint_state = checkpoint_export(
+        config,
+        notes="mid session",
+        playtime_minutes=20,
+        tags=[],
+    )
+    assert checkpoint_result.study_metadata["session_id"] == start_state.session_id
+    assert checkpoint_state.save_account == "save_b"
+
+    with open(tmp_path / "exports" / "study" / "A_speed" / "characters.csv", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert {row["char_name"] for row in rows} == {"Beta"}
