@@ -84,7 +84,7 @@ Fuer Teams ist der pragmatischste Weg:
 2. Die Binary wird unter `tools/leveldbutil.exe` abgelegt oder intern verteilt.
 3. Alle Windows-Nutzer verwenden denselben Repo-Stand.
 
-Die genauere Anleitung steht in [SETUP.md](/Users/jamiehuta/src/t3 code/Idleon Mod/idleon-progress-tracker/SETUP.md).
+Die genauere Anleitung steht in [SETUP.md](./SETUP.md).
 
 ## CLI
 
