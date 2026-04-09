@@ -12,6 +12,73 @@ from pathlib import Path
 from typing import Optional
 
 
+# CrossOver stores Windows app data inside bottle directories on macOS.
+CROSSOVER_BOTTLE_ROOT = (
+    Path.home() / "Library" / "Application Support" / "CrossOver" / "Bottles"
+)
+
+
+def _crossover_save_paths() -> list[Path]:
+    """Collect possible IdleOn save paths from CrossOver bottles on macOS."""
+    if not CROSSOVER_BOTTLE_ROOT.exists():
+        return []
+
+    candidates = []
+    for bottle_dir in CROSSOVER_BOTTLE_ROOT.iterdir():
+        if not bottle_dir.is_dir():
+            continue
+
+        roaming = (
+            bottle_dir
+            / "drive_c"
+            / "users"
+            / "crossover"
+            / "AppData"
+            / "Roaming"
+            / "legends-of-idleon"
+        )
+        candidates.extend(
+            [
+                roaming / "Local Storage" / "leveldb",
+                roaming / "IndexedDB" / "file__0.indexeddb.leveldb",
+            ]
+        )
+
+    return candidates
+
+
+def _crossover_install_paths() -> list[Path]:
+    """Collect possible IdleOn install paths from CrossOver Steam bottles on macOS."""
+    if not CROSSOVER_BOTTLE_ROOT.exists():
+        return []
+
+    candidates = []
+    for bottle_dir in CROSSOVER_BOTTLE_ROOT.iterdir():
+        if not bottle_dir.is_dir():
+            continue
+
+        candidates.extend(
+            [
+                bottle_dir
+                / "drive_c"
+                / "Program Files (x86)"
+                / "Steam"
+                / "steamapps"
+                / "common"
+                / "Legends of Idleon",
+                bottle_dir
+                / "drive_c"
+                / "Program Files"
+                / "Steam"
+                / "steamapps"
+                / "common"
+                / "Legends of Idleon",
+            ]
+        )
+
+    return candidates
+
+
 # Known save file locations by OS
 SAVE_PATHS = {
     "Windows": [
@@ -36,7 +103,7 @@ SAVE_PATHS = {
         / "legends-of-idleon"
         / "IndexedDB"
         / "file__0.indexeddb.leveldb",
-    ],
+    ] + _crossover_save_paths(),
     "Linux": [
         Path.home() / ".config" / "legends-of-idleon" / "Local Storage" / "leveldb",
         Path.home()
@@ -61,7 +128,7 @@ STEAM_IDLEON_PATHS = {
         / "steamapps"
         / "common"
         / "Legends of Idleon",
-    ],
+    ] + _crossover_install_paths(),
     "Linux": [
         Path.home() / ".steam" / "steam" / "steamapps" / "common" / "Legends of Idleon",
         Path.home() / ".local" / "share" / "Steam" / "steamapps" / "common" / "Legends of Idleon",

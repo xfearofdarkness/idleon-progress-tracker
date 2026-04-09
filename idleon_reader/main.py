@@ -16,10 +16,12 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Optional
 
 from .finder import find_save_directory, get_save_info
 from .ldb_reader import read_save_data
 from .progress import extract_progress_summary, format_progress_report
+from .export_tidy import export_tidy_csvs
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -70,6 +72,18 @@ def create_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Extrahiere nur einen bestimmten Schluessel aus den Speicherdaten",
+    )
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="Exportiere tidy CSVs fuer R-Analyse in das angegebene Verzeichnis",
+    )
+    parser.add_argument(
+        "--append",
+        action="store_true",
+        help="An bestehende CSVs anhaengen statt ueberschreiben (fuer Zeitreihen)",
     )
     parser.add_argument(
         "--verbose", "-v",
@@ -181,6 +195,30 @@ def cmd_read(args):
             print(f"[!] Schluessel '{args.key}' nicht gefunden.")
             print(f"    Verfuegbare Schluessel: {', '.join(sorted(raw_data.keys()))}")
             sys.exit(1)
+        return
+
+    # Handle --csv (tidy export for R)
+    if args.csv:
+        print(f"[*] Exportiere tidy CSVs nach: {args.csv}/")
+        source = str(db_path)
+        paths = export_tidy_csvs(
+            raw_data,
+            output_dir=args.csv,
+            source_path=source,
+            append=args.append,
+        )
+        for table_name, filepath in sorted(paths.items()):
+            row_count = sum(1 for _ in open(filepath)) - 1  # minus header
+            print(f"    {table_name + '.csv':20s} {row_count:>5} Zeilen")
+        mode = "angehaengt" if args.append else "geschrieben"
+        print(f"[*] Fertig ({mode}). Lade in R mit:")
+        print(f'    library(readr)')
+        print(f'    snapshots <- read_csv("{args.csv}/snapshots.csv")')
+        print(f'    chars     <- read_csv("{args.csv}/characters.csv")')
+        print(f'    skills    <- read_csv("{args.csv}/skills.csv")')
+        print(f'    inv       <- read_csv("{args.csv}/inventory_slots.csv")')
+        print(f'    quests    <- read_csv("{args.csv}/quests.csv")')
+        print(f'[*] Zusatzdatei: {args.csv}/data_dictionary.csv')
         return
 
     # Handle --json (raw export)

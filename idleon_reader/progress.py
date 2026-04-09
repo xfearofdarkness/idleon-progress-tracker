@@ -128,6 +128,57 @@ def _find_keys_with_prefix(data: dict, prefix: str) -> dict:
     return {k: v for k, v in data.items() if k.startswith(prefix)}
 
 
+def _to_int(value: Any) -> Optional[int]:
+    """Best-effort conversion to int."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_level_value(data: dict) -> Optional[int]:
+    """
+    Extract the main character level from the save shape used by newer IdleOn saves.
+
+    `Lv0[0]` is stored zero-based in the observed local save, so we normalize to the
+    in-game display value by adding 1.
+    """
+    level = data.get("Level")
+    if isinstance(level, list) and level:
+        return _to_int(level[0])
+    if level is not None:
+        return _to_int(level)
+
+    lv0 = data.get("Lv0")
+    if isinstance(lv0, list) and lv0:
+        base_level = _to_int(lv0[0])
+        if base_level is not None and base_level >= 0:
+            return base_level + 1
+
+    lv_total = data.get("LvTotal0")
+    if isinstance(lv_total, list) and lv_total:
+        total_level = _to_int(lv_total[0])
+        if total_level is not None and total_level >= 0:
+            return total_level + 1
+
+    return None
+
+
+def _extract_skill_map(data: dict) -> dict[str, int]:
+    """Extract the first character's skill levels from flat or indexed save layouts."""
+    skill_levels = data.get("SkillLevels")
+    if not isinstance(skill_levels, list):
+        return {}
+
+    skills = {}
+    for idx, skill_name in SKILL_NAMES.items():
+        if idx >= len(skill_levels):
+            continue
+        level = _to_int(skill_levels[idx])
+        skills[skill_name] = 0 if level is None else level
+    return skills
+
+
 def extract_characters(data: dict) -> list[dict]:
     """
     Extract character information from save data.
@@ -141,6 +192,39 @@ def extract_characters(data: dict) -> list[dict]:
 
     if not isinstance(save, dict):
         return characters
+
+    player_db = save.get("PlayerDATABASE")
+    if isinstance(player_db, dict) and player_db:
+        for i, (player_name, player_data) in enumerate(player_db.items()):
+            if not isinstance(player_data, dict):
+                continue
+
+            char = {
+                "index": i,
+                "name": player_name,
+            }
+
+            class_id = _to_int(player_data.get("CharacterClass"))
+            if class_id is not None:
+                char["class_id"] = class_id
+                char["class"] = CLASS_NAMES.get(class_id, f"Class ID {class_id}")
+
+            level = _extract_level_value(player_data)
+            if level is not None:
+                char["level"] = level
+
+            skills = _extract_skill_map(player_data)
+            if skills:
+                char["skills"] = skills
+
+            afk_target = player_data.get("AFKtarget")
+            if afk_target is not None:
+                char["afk_target"] = afk_target
+
+            characters.append(char)
+
+        if characters:
+            return characters
 
     # Try to find character count
     # Characters are typically indexed as CharacterClass_0, CharacterClass_1, etc.
@@ -193,8 +277,11 @@ def extract_characters(data: dict) -> list[dict]:
             if isinstance(skill_levels, list):
                 for j, level in enumerate(skill_levels):
                     skill_name = SKILL_NAMES.get(j, f"Skill_{j}")
-                    if level and level != 0:
-                        skills[skill_name] = level
+                    try:
+                        level = int(level) if level is not None else 0
+                    except (ValueError, TypeError):
+                        level = 0
+                    skills[skill_name] = level
             elif isinstance(skill_levels, dict):
                 for j, level in skill_levels.items():
                     try:
@@ -202,8 +289,11 @@ def extract_characters(data: dict) -> list[dict]:
                     except (ValueError, TypeError):
                         j_int = j
                     skill_name = SKILL_NAMES.get(j_int, f"Skill_{j}")
-                    if level and level != 0:
-                        skills[skill_name] = level
+                    try:
+                        level = int(level) if level is not None else 0
+                    except (ValueError, TypeError):
+                        level = 0
+                    skills[skill_name] = level
             char["skills"] = skills
 
         # AFK activity

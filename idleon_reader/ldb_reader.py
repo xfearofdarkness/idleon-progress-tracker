@@ -2,21 +2,23 @@
 LevelDB Reader for IdleOn Save Data
 
 Reads the LevelDB database used by IdleOn (Electron app) to store local save data.
-Supports two reading strategies:
-  1. Using the 'plyvel' library (fast, C-based)
-  2. Raw file parsing fallback (pure Python, no dependencies)
+Supports these strategies:
+  1. Using the `plyvel` library (fast, direct LevelDB access)
+  2. Using the `leveldbutil dump` CLI (reliable for Chromium/Electron LevelDB files)
+  3. Parsing LevelDB log files directly as a last-resort fallback
 
 The LevelDB key format for IdleOn is:
   _file://\\x00\\x01/<install_path>/resources/app.asar/distBuild/static/game/index.html:<key_name>
 """
 
-import json
+import shutil
 import struct
+import subprocess
 import os
 from pathlib import Path
 from typing import Any, Optional
 
-from .haxe_decoder import try_decode_value, HaxeDecodeError
+from .haxe_decoder import try_decode_value
 
 
 # ─── LevelDB Log File Parser (Pure Python Fallback) ────────────────────────
@@ -26,6 +28,8 @@ RECORD_FULL = 1
 RECORD_FIRST = 2
 RECORD_MIDDLE = 3
 RECORD_LAST = 4
+
+LEVELDBUTIL_LDB_VALUE_MARKER = " : val => "
 
 
 def _parse_log_records(filepath: Path) -> list[bytes]:
@@ -149,61 +153,149 @@ def _read_varint(data: bytes, pos: int) -> tuple[Optional[int], int]:
     return None, pos
 
 
-# ─── LDB Table File Parser ─────────────────────────────────────────────────
+def _find_leveldbutil() -> Optional[str]:
+    """Find the leveldbutil executable if it is installed."""
+    env_override = Path(
+        os.environ.get("IDLEON_LEVELDBUTIL", "")
+    ) if os.environ.get("IDLEON_LEVELDBUTIL") else None
+    repo_tools = Path(__file__).resolve().parent.parent / "tools"
+    candidates = [
+        str(env_override) if env_override else None,
+        shutil.which("leveldbutil"),
+        shutil.which("leveldbutil.exe"),
+        str(repo_tools / "leveldbutil"),
+        str(repo_tools / "leveldbutil.exe"),
+        "/opt/homebrew/bin/leveldbutil",
+        "/usr/local/bin/leveldbutil",
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).exists():
+            return str(candidate)
+    return None
 
 
-def _read_ldb_file(filepath: Path) -> list[tuple[bytes, bytes]]:
+def _decode_leveldbutil_literal(value: str) -> str:
+    """Decode a single-quoted leveldbutil string with C-style backslash escapes."""
+    if len(value) < 2 or value[0] != "'" or value[-1] != "'":
+        raise ValueError("Malformed leveldbutil string literal")
+    inner = value[1:-1]
+    return inner.encode("utf-8", errors="surrogateescape").decode("unicode_escape")
+
+
+def _normalize_key_name(key_str: str) -> str:
+    """Reduce Chromium/Electron LevelDB keys to the logical save key name."""
+    if ":" in key_str:
+        return key_str.rsplit(":", 1)[-1]
+    return key_str
+
+
+def _decode_entry(key_str: str, value_str: str) -> tuple[str, Any]:
+    """Decode a single logical key/value entry from the LevelDB dump."""
+    if value_str.startswith("\x01"):
+        value_str = value_str[1:]
+    return _normalize_key_name(key_str), try_decode_value(value_str)
+
+
+def _iter_leveldbutil_entries(filepath: Path) -> list[tuple[str, str, Optional[str]]]:
     """
-    Simplified reader for .ldb (SSTable) files.
-    Extracts key-value pairs by scanning for recognizable patterns.
-    This is a best-effort parser that looks for the mySave key.
+    Parse a file via `leveldbutil dump`.
+
+    Returns tuples of (action, key, value) where action is "put" or "del".
     """
-    pairs = []
-    try:
-        with open(filepath, "rb") as f:
-            data = f.read()
-    except (OSError, IOError):
-        return pairs
+    leveldbutil = _find_leveldbutil()
+    if leveldbutil is None:
+        raise FileNotFoundError("leveldbutil not found")
 
-    # Search for 'mySave' key marker in the raw data
-    marker = b"mySave"
-    search_pos = 0
+    proc = subprocess.run(
+        [leveldbutil, "dump", str(filepath)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
-    while True:
-        idx = data.find(marker, search_pos)
-        if idx == -1:
-            break
+    entries = []
+    for line in proc.stdout.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("put "):
+            body = stripped[4:]
+            key_sep = body.find("' '")
+            if key_sep == -1:
+                continue
+            key_literal = body[: key_sep + 1]
+            value_literal = body[key_sep + 2 :]
+            entries.append(
+                (
+                    "put",
+                    _decode_leveldbutil_literal(key_literal),
+                    _decode_leveldbutil_literal(value_literal),
+                )
+            )
+            continue
 
-        # Try to find the value following the key
-        # The value typically starts with \x01 followed by the Haxe-serialized data
-        # or it could be a direct JSON/text value
-        value_start = idx + len(marker)
+        if stripped.startswith("del "):
+            entries.append(("del", _decode_leveldbutil_literal(stripped[4:]), None))
+            continue
 
-        # Look for the start of the value (skip any separator bytes)
-        while value_start < len(data) and data[value_start] in (0x00, 0x01, 0x02):
-            value_start += 1
+        key_sep = line.find("' @ ")
+        if key_sep != -1 and LEVELDBUTIL_LDB_VALUE_MARKER in line:
+            key_literal = line[: key_sep + 1]
+            _, _, value_literal = line.partition(LEVELDBUTIL_LDB_VALUE_MARKER)
+            entries.append(
+                (
+                    "put",
+                    _decode_leveldbutil_literal(key_literal),
+                    _decode_leveldbutil_literal(value_literal),
+                )
+            )
 
-        if value_start < len(data):
-            # Try to extract a reasonable chunk of text
-            value_end = value_start
-            # Read until we hit non-text data or end of meaningful content
-            while value_end < len(data):
-                byte = data[value_end]
-                # Stop at obvious binary data boundaries
-                if byte < 0x09 and byte != 0x00:
-                    break
-                value_end += 1
-                # Safety limit
-                if value_end - value_start > 10_000_000:
-                    break
+    return entries
 
-            value = data[value_start:value_end]
-            if value:
-                pairs.append((marker, value))
 
-        search_pos = idx + 1
+def read_with_leveldbutil(db_path: Path) -> dict[str, Any]:
+    """
+    Read IdleOn save data using the `leveldbutil dump` CLI.
 
-    return pairs
+    This is more reliable than the built-in raw byte scanner for Chromium/Electron
+    LevelDB files and works well on systems where `leveldbutil` is installed.
+    """
+    result = {}
+
+    log_files = sorted(db_path.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for log_file in log_files:
+        try:
+            entries = _iter_leveldbutil_entries(log_file)
+        except subprocess.CalledProcessError:
+            continue
+        for action, key_str, value_str in entries:
+            key_name = _normalize_key_name(key_str)
+            if action == "del":
+                result.pop(key_name, None)
+                continue
+            try:
+                key_name, decoded = _decode_entry(key_str, value_str or "")
+                result[key_name] = decoded
+            except (ValueError, SyntaxError):
+                continue
+
+    ldb_files = sorted(db_path.glob("*.ldb"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for ldb_file in ldb_files:
+        try:
+            entries = _iter_leveldbutil_entries(ldb_file)
+        except subprocess.CalledProcessError:
+            continue
+        for action, key_str, value_str in entries:
+            if action != "put":
+                continue
+            key_name = _normalize_key_name(key_str)
+            if key_name in result:
+                continue
+            try:
+                key_name, decoded = _decode_entry(key_str, value_str or "")
+                result[key_name] = decoded
+            except (ValueError, SyntaxError):
+                continue
+
+    return result
 
 
 # ─── High-Level Reader ──────────────────────────────────────────────────────
@@ -253,9 +345,11 @@ def read_with_plyvel(db_path: Path, idleon_path: Optional[Path] = None) -> dict[
 
 def read_raw(db_path: Path) -> dict[str, Any]:
     """
-    Read IdleOn save data using raw file parsing (no external dependencies).
+    Read IdleOn save data using raw LevelDB log parsing.
 
-    Scans .log and .ldb files in the LevelDB directory for save data.
+    This last-resort fallback only parses `.log` write batches. It avoids
+    attempting to scrape `.ldb` SSTables heuristically because that produced
+    ambiguous and misleading data.
 
     Args:
         db_path: Path to the LevelDB directory.
@@ -289,25 +383,6 @@ def read_raw(db_path: Path) -> dict[str, Any]:
                 except (UnicodeDecodeError, ValueError):
                     continue
 
-    # Parse .ldb files (SSTables)
-    ldb_files = sorted(db_path.glob("*.ldb"), key=lambda p: p.stat().st_mtime, reverse=True)
-    for ldb_file in ldb_files:
-        pairs = _read_ldb_file(ldb_file)
-        for key_bytes, value_bytes in pairs:
-            try:
-                key_str = key_bytes.decode("utf-8", errors="replace") if isinstance(key_bytes, bytes) else str(key_bytes)
-                value_str = value_bytes.decode("utf-8", errors="replace") if isinstance(value_bytes, bytes) else str(value_bytes)
-
-                if value_str.startswith("\x01"):
-                    value_str = value_str[1:]
-
-                # Only add if not already found (log files are more recent)
-                if key_str not in result:
-                    result[key_str] = try_decode_value(value_str)
-
-            except (UnicodeDecodeError, ValueError):
-                continue
-
     return result
 
 
@@ -328,9 +403,23 @@ def read_save_data(db_path: Path, idleon_path: Optional[Path] = None) -> dict[st
         print("[*] Using plyvel for LevelDB access...")
         return read_with_plyvel(db_path, idleon_path)
     except ImportError:
-        print("[*] plyvel not available, using raw file parser...")
+        print("[*] plyvel not available.")
     except Exception as e:
-        print(f"[!] plyvel failed ({e}), falling back to raw parser...")
+        print(f"[!] plyvel failed ({e}).")
+
+    # Try leveldbutil before the built-in raw parser
+    try:
+        print("[*] Trying leveldbutil dump fallback...")
+        result = read_with_leveldbutil(db_path)
+        if result:
+            return result
+    except FileNotFoundError:
+        print("[*] leveldbutil not available.")
+    except subprocess.CalledProcessError as e:
+        print(f"[!] leveldbutil failed ({e}), falling back to raw parser...")
+    except Exception as e:
+        print(f"[!] leveldbutil parsing failed ({e}), falling back to raw parser...")
 
     # Fallback to raw parsing
+    print("[*] Falling back to raw log parser...")
     return read_raw(db_path)
