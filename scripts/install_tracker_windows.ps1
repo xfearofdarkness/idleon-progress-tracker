@@ -15,6 +15,36 @@ function Invoke-NativeOrThrow {
     }
 }
 
+function Get-PythonCommandSource {
+    $command = Get-Command python -ErrorAction SilentlyContinue
+    if ($null -eq $command) {
+        return ""
+    }
+    return $command.Source
+}
+
+function Assert-UsablePython {
+    $pythonSource = Get-PythonCommandSource
+    if (-not $pythonSource) {
+        throw "'python' was not found on PATH. Install Python 3.10+ and reopen PowerShell."
+    }
+
+    & python --version *> $null
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    if ($pythonSource -like "*WindowsApps*") {
+        throw (
+            "'python' currently points to the Microsoft Store alias ($pythonSource). " +
+            "Install a real Python 3.10+ and disable the App execution aliases for python.exe/python3.exe " +
+            "under Settings > Apps > Advanced app settings > App execution aliases."
+        )
+    }
+
+    throw "'python' is on PATH but not usable: $pythonSource"
+}
+
 function Test-WindowsVenv {
     param(
         [Parameter(Mandatory = $true)]
@@ -41,9 +71,7 @@ function Remove-VenvIfPresent {
 $RootDir = Split-Path -Parent $PSScriptRoot
 Set-Location $RootDir
 
-if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    throw "'python' was not found on PATH."
-}
+Assert-UsablePython
 
 if (-not (Test-WindowsVenv $RootDir)) {
     $existingBinPython = Join-Path $RootDir ".venv\bin\python"
