@@ -20,7 +20,12 @@ if (-not (Test-Path ".venv")) {
     powershell -ExecutionPolicy Bypass -File .\scripts\install_tracker_windows.ps1 | Out-Null
 }
 
-. .\.venv\Scripts\Activate.ps1
+$ActivateScript = Join-Path $RootDir ".venv\Scripts\Activate.ps1"
+if (-not (Test-Path $ActivateScript)) {
+    throw "Virtual environment activation script not found: $ActivateScript"
+}
+
+. $ActivateScript
 python -c "import idleon_reader" 2>$null
 if ($LASTEXITCODE -ne 0) {
     python -m pip install -e . | Out-Null
