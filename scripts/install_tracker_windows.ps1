@@ -19,12 +19,20 @@ function Invoke-NativeOrThrow {
 $RootDir = Split-Path -Parent $PSScriptRoot
 Set-Location $RootDir
 
-if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
-    throw "Python launcher 'py' not found."
+if (Get-Command python -ErrorAction SilentlyContinue) {
+    $VenvCommand = "python"
+    $VenvArguments = @("-m", "venv", ".venv")
+}
+elseif (Get-Command py -ErrorAction SilentlyContinue) {
+    $VenvCommand = "py"
+    $VenvArguments = @("-3", "-m", "venv", ".venv")
+}
+else {
+    throw "Neither 'python' nor 'py' was found on PATH."
 }
 
 if (-not (Test-Path ".venv")) {
-    Invoke-NativeOrThrow py -3 -m venv .venv
+    Invoke-NativeOrThrow $VenvCommand @VenvArguments
 }
 
 if (-not (Test-Path ".venv")) {
