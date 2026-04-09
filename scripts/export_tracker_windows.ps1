@@ -16,6 +16,17 @@ function Invoke-NativeOrThrow {
     }
 }
 
+function Test-WindowsVenv {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $RootPath
+    )
+
+    $activateScript = Join-Path $RootPath ".venv\Scripts\Activate.ps1"
+    $pythonExe = Join-Path $RootPath ".venv\Scripts\python.exe"
+    return (Test-Path $activateScript) -and (Test-Path $pythonExe)
+}
+
 $RootDir = Split-Path -Parent $PSScriptRoot
 Set-Location $RootDir
 
@@ -31,17 +42,13 @@ elseif ($args.Count -ge 1) {
     $ExtraArgs = $args
 }
 
-if (-not (Test-Path ".venv")) {
+if (-not (Test-WindowsVenv $RootDir)) {
     Invoke-NativeOrThrow powershell -ExecutionPolicy Bypass -File .\scripts\install_tracker_windows.ps1
 }
 
-if (-not (Test-Path ".venv")) {
-    throw "Virtual environment directory is missing after installation: $RootDir\.venv"
-}
-
 $ActivateScript = Join-Path $RootDir ".venv\Scripts\Activate.ps1"
-if (-not (Test-Path $ActivateScript)) {
-    throw "Virtual environment activation script not found: $ActivateScript"
+if (-not (Test-WindowsVenv $RootDir)) {
+    throw "Windows virtual environment is invalid after installation: $RootDir\.venv"
 }
 
 . $ActivateScript
