@@ -1,45 +1,9 @@
 # IdleOn Progress Tracker
 
 Liest lokale Save-Daten aus **Legends of Idleon** und exportiert sie als
-saubere, analysierbare CSV-Datensaetze fuer Data-Science-Workflows in R oder
-Python.
+saubere CSV-Datensaetze fuer Data-Science-Workflows.
 
-Das Tool ist auf einen klaren Forschungs- und Projekt-Workflow ausgelegt:
-
-- automatische Erkennung von IdleOn-Saves auf macOS, Windows und CrossOver
-- rein lesender Zugriff ohne Aenderung am Spielstand
-- normalisierte CSV-Tabellen mit stabilen Join-Schluesseln
-- dokumentierte Spalten ueber `data_dictionary.csv`
-- keine vorgefertigte Analyse- oder Plot-Logik im Export
-
-## Schnellstart
-
-```bash
-git clone https://github.com/xfearofdarkness/idleon-progress-tracker.git
-cd idleon-progress-tracker
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-
-# Speicherort pruefen
-python -m idleon_reader --info
-
-# Menschenlesbaren Bericht anzeigen
-python -m idleon_reader
-
-# CSV-Datensaetze exportieren
-python -m idleon_reader --csv exports/latest
-```
-
-Wenn du nur den direkten CLI-Output des Extractors sehen willst:
-
-```bash
-bash scripts/show_extractor_output.sh
-```
-
-## Exportierte Datensaetze
-
-Ein Export nach `exports/latest/` erzeugt diese Dateien:
+Der Export ist auf klare, auswertbare Tabellen ausgelegt:
 
 - `snapshots.csv`
 - `account_metrics.csv`
@@ -52,66 +16,96 @@ Ein Export nach `exports/latest/` erzeugt diese Dateien:
 - `starsigns.csv`
 - `data_dictionary.csv`
 
-Der Export ist bewusst auf eindeutige, auswertbare Tabellen ausgelegt:
+## Installation
 
-- `snapshot_id` verbindet alle Tabellen
-- eine Beobachtung pro Zeile
-- feste, dokumentierte Spalten
-- JSON-Zellen nur dort, wo rohe Unterstrukturen erhalten bleiben sollen
-- auch leere Tabellen werden mit Header geschrieben
+### macOS / Linux
 
-## Plattformen
-
-### macOS
-
-- native Steam-Installation wird automatisch erkannt
-- CrossOver-Bottles werden automatisch erkannt
-- empfohlen: `brew install leveldb`
+```bash
+git clone https://github.com/xfearofdarkness/idleon-progress-tracker.git
+cd idleon-progress-tracker
+bash scripts/install_tracker.sh
+```
 
 ### Windows
 
-Windows funktioniert, wenn mindestens ein nutzbarer LevelDB-Zugriff vorhanden
-ist:
+In PowerShell:
 
-1. `plyvel` funktioniert in der lokalen Python-Umgebung
-2. `leveldbutil.exe` liegt auf `PATH`
-3. `leveldbutil.exe` liegt im Repo unter `tools/leveldbutil.exe`
-4. `IDLEON_LEVELDBUTIL` zeigt auf die Binary
+```powershell
+git clone https://github.com/xfearofdarkness/idleon-progress-tracker.git
+cd idleon-progress-tracker
+powershell -ExecutionPolicy Bypass -File .\scripts\install_tracker_windows.ps1
+```
 
-Fuer Teams ist der pragmatischste Weg:
+Hinweis fuer Windows:
 
-1. Eine Person baut `leveldbutil.exe` einmal.
-2. Die Binary wird unter `tools/leveldbutil.exe` abgelegt oder intern verteilt.
-3. Alle Windows-Nutzer verwenden denselben Repo-Stand.
+- `tools/leveldbutil.exe` liegt bereits im Repo.
+- Dadurch muss auf Windows niemand `leveldb` selbst bauen.
 
-Die genauere Anleitung steht in [SETUP.md](./SETUP.md).
+## Nutzung
 
-## CLI
+### Speicherort pruefen
 
 ```bash
-# Auto-Erkennung und Bericht
-python -m idleon_reader
-
-# Speicherort anzeigen
 python -m idleon_reader --info
+```
 
-# Rohdaten als JSON exportieren
-python -m idleon_reader --json --output save.json
+### Bericht anzeigen
 
-# CSV-Datensaetze exportieren
+```bash
+python -m idleon_reader
+```
+
+### CSV-Datensaetze exportieren
+
+```bash
 python -m idleon_reader --csv exports/latest
+```
 
-# Mehrere Zeitpunkte in dieselben CSVs schreiben
+### Mehrere Zeitpunkte in dieselben CSVs schreiben
+
+```bash
 python -m idleon_reader --csv exports/history --append
+```
 
-# Nur den sichtbaren CLI-Output des Extractors zeigen
+### Sichtbaren CLI-Output des Extractors anzeigen
+
+```bash
 bash scripts/show_extractor_output.sh
 ```
+
+Optional mit Logdatei:
+
+```bash
+bash scripts/show_extractor_output.sh extractor-output.log
+```
+
+## Was der Installer macht
+
+Die Installationsskripte:
+
+- legen bei Bedarf `.venv` an
+- aktualisieren `pip`
+- installieren das Paket im Editable-Modus
+- pruefen die wichtigsten Voraussetzungen
+- geben die naechsten Befehle zum Testen aus
+
+## Plattformhinweise
+
+### macOS
+
+- native Steam-Installationen werden erkannt
+- CrossOver-Bottles werden erkannt
+- wenn `leveldbutil` lokal fehlt, ist `brew install leveldb` empfohlen
+
+### Windows
+
+- das Repo enthaelt bereits `tools/leveldbutil.exe`
+- der Reader nutzt die Datei automatisch
+- falls noetig, kann zusaetzlich `IDLEON_LEVELDBUTIL` gesetzt werden
 
 ## Tests
 
 ```bash
-pip install pytest
 pytest -q
 ```
 
@@ -119,8 +113,7 @@ pytest -q
 
 - Das Tool liest nur Daten.
 - IdleOn wird nicht gepatcht oder veraendert.
-- Fuer Team-Setups auf Windows sind die Skripte in `scripts/` und die Hinweise
-  in `SETUP.md` relevant.
+- Es wird keine Analyse- oder Plot-Logik mitexportiert, nur Daten.
 
 ## Lizenz
 
