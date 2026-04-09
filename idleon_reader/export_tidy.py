@@ -6,16 +6,26 @@ produce stable, analysable datasets with explicit join keys and predictable
 column names.
 """
 
+from __future__ import annotations
+
 import csv
 import hashlib
 import io
 import json
+import platform
+import subprocess
+import sys
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+from . import __version__
 from .progress import CLASS_NAMES, SKILL_NAMES, _extract_level_value, _to_int
 
+
+SCHEMA_VERSION = 2
+RUN_TYPE_CHOICES = ("manual", "baseline", "checkpoint", "session_end", "milestone")
 
 R_SAFE_SKILL_NAMES = {k: v.replace("'", "").replace(" ", "_") for k, v in SKILL_NAMES.items()}
 
@@ -43,6 +53,22 @@ TABLE_SCHEMAS = {
         ("snapshot_id", "string", "Deterministic snapshot key for joins."),
         ("timestamp", "datetime", "UTC export timestamp."),
         ("source_path", "string", "Original save directory used for the export."),
+        ("account_label", "string", "Study-facing account label for comparisons."),
+        ("study_group", "string", "Optional study group or cohort."),
+        ("session_id", "string", "Session identifier supplied at export time."),
+        ("run_type", "string", "Optional run classification such as baseline or milestone."),
+        ("strategy_label", "string", "Optional study strategy label."),
+        ("notes", "string", "Free-form notes captured with the snapshot."),
+        ("playtime_minutes_since_last_snapshot", "integer", "Estimated playtime since the prior snapshot."),
+        ("schema_version", "integer", "Exporter schema version for compatibility tracking."),
+        ("exporter_version", "string", "IdleOn tracker package version."),
+        ("git_commit", "string", "Git commit used for the export, if available."),
+        ("platform", "string", "Host platform string for the export run."),
+    ],
+    "snapshot_tags": [
+        ("snapshot_id", "string", "Join key to snapshots.csv."),
+        ("tag", "string", "User-supplied event or milestone tag."),
+        ("tag_index", "integer", "Zero-based input order for repeated tags."),
     ],
     "account_metrics": [
         ("snapshot_id", "string", "Join key to snapshots.csv."),
@@ -121,6 +147,69 @@ TABLE_SCHEMAS = {
         ("is_unlocked", "integer", "1 if the value is truthy."),
     ],
 }
+
+TABLE_ORDER = [
+    "snapshots",
+    "snapshot_tags",
+    "account_metrics",
+    "characters",
+    "skills",
+    "inventory_slots",
+    "equipment_slots",
+    "quests",
+    "cards",
+    "starsigns",
+]
+
+REQUIRED_CORE_TABLES = [
+    "snapshots",
+    "snapshot_tags",
+    "account_metrics",
+    "characters",
+    "skills",
+    "inventory_slots",
+    "equipment_slots",
+    "quests",
+    "cards",
+    "starsigns",
+]
+
+DUPLICATE_KEY_FIELDS = {
+    "snapshots": ("snapshot_id",),
+    "snapshot_tags": ("snapshot_id", "tag_index"),
+    "account_metrics": ("snapshot_id", "metric_name"),
+    "characters": ("snapshot_id", "char_index"),
+    "skills": ("snapshot_id", "char_index", "skill_name"),
+    "inventory_slots": ("snapshot_id", "char_index", "slot_index"),
+    "equipment_slots": ("snapshot_id", "char_index", "equipment_tab_index", "slot_index"),
+    "quests": ("snapshot_id", "char_index", "quest_id"),
+    "cards": ("snapshot_id", "card_group_index", "card_id"),
+    "starsigns": ("snapshot_id", "starsign_id"),
+}
+
+
+class ExportValidationError(RuntimeError):
+    """Raised when export validation fails before or after writing files."""
+
+    def __init__(self, message: str, validation_results: Optional[list[dict[str, Any]]] = None):
+        super().__init__(message)
+        self.validation_results = validation_results or []
+
+
+@dataclass
+class ExportResult:
+    snapshot_id: str
+    timestamp: str
+    output_dir: Path
+    source_path: str
+    append: bool
+    dry_run: bool
+    paths: dict[str, Path]
+    table_row_counts: dict[str, int]
+    validation: list[dict[str, Any]]
+    warnings: list[str]
+    manifest_path: Optional[Path]
+    study_metadata: dict[str, Any]
 
 
 def make_snapshot_id(timestamp: str, source_path: str = "") -> str:
@@ -475,6 +564,21 @@ def extract_tidy_starsigns(data: dict, snapshot_id: str) -> list[dict]:
     return rows
 
 
+def extract_snapshot_tags(snapshot_id: str, tags: list[str]) -> list[dict]:
+    return [
+        {
+            "snapshot_id": snapshot_id,
+            "tag": tag,
+            "tag_index": idx,
+        }
+        for idx, tag in enumerate(tags)
+    ]
+
+
+def _expected_fieldnames(table_name: str) -> list[str]:
+    return [column_name for column_name, _, _ in TABLE_SCHEMAS[table_name]]
+
+
 def _write_csv(rows: list[dict], filepath: Path, append: bool = False, fieldnames: Optional[list[str]] = None):
     mode = "a" if append and filepath.exists() else "w"
     write_header = not (append and filepath.exists())
@@ -504,27 +608,64 @@ def _write_dataset_dictionary(output_dir: Path):
     _write_csv(rows, output_dir / "data_dictionary.csv", append=False, fieldnames=list(rows[0].keys()))
 
 
-def export_tidy_csvs(
-    data: dict,
-    output_dir: Path,
-    source_path: str = "",
-    append: bool = False,
-    timestamp: Optional[str] = None,
-) -> dict[str, Path]:
-    output_dir.mkdir(parents=True, exist_ok=True)
+def _normalize_study_metadata(metadata: Optional[dict[str, Any]]) -> dict[str, Any]:
+    data = metadata or {}
+    tags = data.get("tags") or []
+    return {
+        "account_label": data.get("account_label", "") or "",
+        "study_group": data.get("study_group", "") or "",
+        "session_id": data.get("session_id", "") or "",
+        "run_type": data.get("run_type", "") or "",
+        "strategy_label": data.get("strategy_label", "") or "",
+        "notes": data.get("notes", "") or "",
+        "playtime_minutes_since_last_snapshot": data.get("playtime_minutes_since_last_snapshot", ""),
+        "tags": [str(tag) for tag in tags],
+    }
 
-    if timestamp is None:
-        timestamp = datetime.now(timezone.utc).isoformat()
 
-    snapshot_id = make_snapshot_id(timestamp, source_path)
-    snapshot_rows = [{
+def _platform_string() -> str:
+    return platform.platform()
+
+
+def _git_commit() -> str:
+    repo_root = Path(__file__).resolve().parent.parent
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return ""
+    return result.stdout.strip()
+
+
+def _build_snapshot_row(snapshot_id: str, timestamp: str, source_path: str, metadata: dict[str, Any]) -> dict[str, Any]:
+    return {
         "snapshot_id": snapshot_id,
         "timestamp": timestamp,
         "source_path": source_path,
-    }]
+        "account_label": metadata["account_label"],
+        "study_group": metadata["study_group"],
+        "session_id": metadata["session_id"],
+        "run_type": metadata["run_type"],
+        "strategy_label": metadata["strategy_label"],
+        "notes": metadata["notes"],
+        "playtime_minutes_since_last_snapshot": metadata["playtime_minutes_since_last_snapshot"],
+        "schema_version": SCHEMA_VERSION,
+        "exporter_version": __version__,
+        "git_commit": _git_commit(),
+        "platform": _platform_string(),
+    }
 
-    tables = {
-        "snapshots": snapshot_rows,
+
+def _build_tables(data: dict, snapshot_row: dict[str, Any], metadata: dict[str, Any]) -> dict[str, list[dict]]:
+    snapshot_id = snapshot_row["snapshot_id"]
+    return {
+        "snapshots": [snapshot_row],
+        "snapshot_tags": extract_snapshot_tags(snapshot_id, metadata["tags"]),
         "account_metrics": extract_tidy_account_metrics(data, snapshot_id),
         "characters": extract_tidy_characters(data, snapshot_id),
         "skills": extract_tidy_skills(data, snapshot_id),
@@ -535,15 +676,276 @@ def export_tidy_csvs(
         "starsigns": extract_tidy_starsigns(data, snapshot_id),
     }
 
-    paths = {}
-    for table_name, rows in tables.items():
-        filepath = output_dir / f"{table_name}.csv"
-        fieldnames = [column_name for column_name, _, _ in TABLE_SCHEMAS[table_name]]
-        _write_csv(rows, filepath, append=append, fieldnames=fieldnames)
-        paths[table_name] = filepath
 
-    _write_dataset_dictionary(output_dir)
-    return paths
+def _record_validation(results: list[dict[str, Any]], name: str, passed: bool, message: str, **details: Any) -> None:
+    entry = {
+        "name": name,
+        "passed": passed,
+        "message": message,
+    }
+    if details:
+        entry["details"] = details
+    results.append(entry)
+
+
+def _header_line(fieldnames: list[str]) -> str:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(fieldnames)
+    return output.getvalue().strip()
+
+
+def _count_csv_rows(filepath: Path) -> int:
+    if not filepath.exists():
+        return 0
+    with open(filepath, encoding="utf-8", newline="") as handle:
+        return max(sum(1 for _ in handle) - 1, 0)
+
+
+def _validate_tables(
+    tables: dict[str, list[dict]],
+    snapshot_id: str,
+    output_dir: Path,
+    append: bool,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    results: list[dict[str, Any]] = []
+    warnings: list[str] = []
+
+    missing_tables = [table_name for table_name in REQUIRED_CORE_TABLES if table_name not in tables or not isinstance(tables[table_name], list)]
+    _record_validation(
+        results,
+        "required_tables_present",
+        not missing_tables,
+        "All expected tables are present in memory." if not missing_tables else "Missing required tables before export.",
+        missing_tables=missing_tables,
+    )
+
+    snapshot_ok = bool(snapshot_id)
+    _record_validation(
+        results,
+        "snapshot_id_present",
+        snapshot_ok,
+        "Snapshot id is available." if snapshot_ok else "Snapshot id is empty.",
+    )
+
+    mismatched_tables = []
+    for table_name, rows in tables.items():
+        for row in rows:
+            if row.get("snapshot_id", "") != snapshot_id:
+                mismatched_tables.append(table_name)
+                break
+    _record_validation(
+        results,
+        "snapshot_ids_match",
+        not mismatched_tables,
+        "All exported rows point to the current snapshot." if not mismatched_tables else "Some rows reference the wrong snapshot id.",
+        tables=mismatched_tables,
+    )
+
+    duplicate_details = {}
+    for table_name, key_fields in DUPLICATE_KEY_FIELDS.items():
+        rows = tables.get(table_name, [])
+        seen = set()
+        duplicates = []
+        for row in rows:
+            key = tuple(row.get(field, "") for field in key_fields)
+            if key in seen:
+                duplicates.append(key)
+                if len(duplicates) == 3:
+                    break
+            seen.add(key)
+        if duplicates:
+            duplicate_details[table_name] = {
+                "key_fields": list(key_fields),
+                "examples": [list(key) for key in duplicates],
+            }
+    _record_validation(
+        results,
+        "duplicate_keys",
+        not duplicate_details,
+        "No duplicate natural keys found in exported tables." if not duplicate_details else "Duplicate natural keys detected.",
+        duplicates=duplicate_details,
+    )
+
+    if append and output_dir.exists():
+        existing_files = [output_dir / f"{table_name}.csv" for table_name in TABLE_ORDER if (output_dir / f"{table_name}.csv").exists()]
+        if existing_files:
+            missing_files = [f"{table_name}.csv" for table_name in TABLE_ORDER if not (output_dir / f"{table_name}.csv").exists()]
+            _record_validation(
+                results,
+                "append_target_complete",
+                not missing_files,
+                "Append target contains all required CSV tables." if not missing_files else "Append target is incomplete.",
+                missing_files=missing_files,
+            )
+
+            schema_mismatches = {}
+            duplicated_header_rows = {}
+            for table_name in TABLE_ORDER:
+                filepath = output_dir / f"{table_name}.csv"
+                if not filepath.exists():
+                    continue
+                expected = _expected_fieldnames(table_name)
+                with open(filepath, encoding="utf-8", newline="") as handle:
+                    lines = handle.read().splitlines()
+                if not lines:
+                    schema_mismatches[table_name] = {
+                        "expected": expected,
+                        "actual": [],
+                    }
+                    continue
+                actual_header = next(csv.reader([lines[0]]), [])
+                if actual_header != expected:
+                    schema_mismatches[table_name] = {
+                        "expected": expected,
+                        "actual": actual_header,
+                    }
+                header_line = _header_line(expected)
+                duplicated_count = sum(1 for line in lines[1:] if line.strip() == header_line)
+                if duplicated_count:
+                    duplicated_header_rows[table_name] = duplicated_count
+
+            _record_validation(
+                results,
+                "append_headers_match",
+                not schema_mismatches,
+                "Append target headers match the current schema." if not schema_mismatches else "Append target headers do not match the current schema.",
+                mismatches=schema_mismatches,
+            )
+            _record_validation(
+                results,
+                "append_no_duplicate_headers",
+                not duplicated_header_rows,
+                "Append target does not contain duplicated header rows." if not duplicated_header_rows else "Append target contains duplicated header rows.",
+                duplicates=duplicated_header_rows,
+            )
+
+    if not tables.get("characters"):
+        warnings.append("characters.csv ist leer; pruefe, ob der richtige Save geladen wurde.")
+
+    if not tables.get("account_metrics"):
+        warnings.append("account_metrics.csv ist leer; pruefe, ob der Save ungewoehnlich formatiert ist.")
+
+    failures = [result for result in results if not result["passed"]]
+    if failures:
+        message = failures[0]["message"]
+        if failures[0]["name"] in {"append_target_complete", "append_headers_match"}:
+            message += " Nutze ein neues Exportverzeichnis oder migriere den alten Export."
+        raise ExportValidationError(message, validation_results=results)
+
+    return results, warnings
+
+
+def _validate_written_row_counts(
+    output_dir: Path,
+    expected_counts: dict[str, int],
+    previous_counts: dict[str, int],
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    mismatches = {}
+
+    for table_name in TABLE_ORDER:
+        filepath = output_dir / f"{table_name}.csv"
+        actual_total = _count_csv_rows(filepath)
+        expected_delta = expected_counts[table_name]
+        previous_total = previous_counts[table_name]
+        actual_delta = actual_total - previous_total
+        if actual_delta != expected_delta:
+            mismatches[table_name] = {
+                "expected_delta": expected_delta,
+                "actual_delta": actual_delta,
+                "previous_total": previous_total,
+                "actual_total": actual_total,
+            }
+
+    _record_validation(
+        results,
+        "written_row_counts_match",
+        not mismatches,
+        "Written row counts match the exported row counts." if not mismatches else "Written row counts do not match the exported row counts.",
+        mismatches=mismatches,
+    )
+
+    if mismatches:
+        raise ExportValidationError("Written row counts do not match the exported row counts.", validation_results=results)
+
+    return results
+
+
+def _write_manifest(filepath: Path, manifest: dict[str, Any]) -> None:
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    filepath.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def export_tidy_csvs(
+    data: dict,
+    output_dir: Path,
+    source_path: str = "",
+    append: bool = False,
+    timestamp: Optional[str] = None,
+    metadata: Optional[dict[str, Any]] = None,
+    dry_run: bool = False,
+) -> ExportResult:
+    if timestamp is None:
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+    output_dir = Path(output_dir)
+    metadata = _normalize_study_metadata(metadata)
+
+    snapshot_id = make_snapshot_id(timestamp, source_path)
+    snapshot_row = _build_snapshot_row(snapshot_id, timestamp, source_path, metadata)
+    tables = _build_tables(data, snapshot_row, metadata)
+    table_row_counts = {table_name: len(tables[table_name]) for table_name in TABLE_ORDER}
+    paths = {table_name: output_dir / f"{table_name}.csv" for table_name in TABLE_ORDER}
+
+    validation_results, warnings = _validate_tables(tables, snapshot_id, output_dir, append=append)
+    manifest_path = None
+
+    if not dry_run:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        previous_counts = {table_name: _count_csv_rows(paths[table_name]) for table_name in TABLE_ORDER}
+
+        for table_name in TABLE_ORDER:
+            fieldnames = _expected_fieldnames(table_name)
+            _write_csv(tables[table_name], paths[table_name], append=append, fieldnames=fieldnames)
+
+        _write_dataset_dictionary(output_dir)
+        validation_results.extend(_validate_written_row_counts(output_dir, table_row_counts, previous_counts))
+
+        manifest_path = output_dir / "run_manifests" / f"{snapshot_id}.json"
+        manifest = {
+            "snapshot_id": snapshot_id,
+            "timestamp": timestamp,
+            "export_dir": str(output_dir),
+            "mode": "append" if append else "write",
+            "source_path": source_path,
+            "platform": snapshot_row["platform"],
+            "python_version": sys.version.split()[0],
+            "schema_version": SCHEMA_VERSION,
+            "exporter_version": __version__,
+            "git_commit": snapshot_row["git_commit"],
+            "study_metadata": metadata,
+            "table_row_counts": table_row_counts,
+            "validation": validation_results,
+            "warnings": warnings,
+            "success": True,
+        }
+        _write_manifest(manifest_path, manifest)
+
+    return ExportResult(
+        snapshot_id=snapshot_id,
+        timestamp=timestamp,
+        output_dir=output_dir,
+        source_path=source_path,
+        append=append,
+        dry_run=dry_run,
+        paths=paths,
+        table_row_counts=table_row_counts,
+        validation=validation_results,
+        warnings=warnings,
+        manifest_path=manifest_path,
+        study_metadata=metadata,
+    )
 
 
 def rows_to_csv_string(rows: list[dict]) -> str:

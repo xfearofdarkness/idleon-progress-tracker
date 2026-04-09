@@ -1,11 +1,16 @@
 import csv
+import json
+import idleon_reader.export_tidy as export_tidy
 
 import pytest
 
 from idleon_reader.export_tidy import (
     ALL_SKILL_IDS,
     R_SAFE_SKILL_NAMES,
+    ExportValidationError,
+    SCHEMA_VERSION,
     export_tidy_csvs,
+    extract_snapshot_tags,
     extract_tidy_account_metrics,
     extract_tidy_cards,
     extract_tidy_characters,
@@ -149,16 +154,35 @@ def test_extract_starsigns(sample_save_data):
     assert locked["is_unlocked"] == 0
 
 
+def test_extract_snapshot_tags():
+    rows = extract_snapshot_tags("snap", ["session_start", "level_10"])
+    assert rows == [
+        {"snapshot_id": "snap", "tag": "session_start", "tag_index": 0},
+        {"snapshot_id": "snap", "tag": "level_10", "tag_index": 1},
+    ]
+
+
 def test_export_tidy_csvs(sample_save_data, tmp_path):
-    paths = export_tidy_csvs(
+    result = export_tidy_csvs(
         sample_save_data,
         tmp_path,
         source_path="test-save",
         timestamp="2026-01-01T00:00:00Z",
+        metadata={
+            "account_label": "A_speed",
+            "study_group": "pilot",
+            "session_id": "s01",
+            "run_type": "baseline",
+            "strategy_label": "speed",
+            "notes": "first snapshot",
+            "playtime_minutes_since_last_snapshot": 15,
+            "tags": ["session_start", "baseline"],
+        },
     )
 
     expected_tables = {
         "snapshots",
+        "snapshot_tags",
         "account_metrics",
         "characters",
         "skills",
@@ -168,19 +192,103 @@ def test_export_tidy_csvs(sample_save_data, tmp_path):
         "cards",
         "starsigns",
     }
-    assert expected_tables == set(paths.keys())
+    assert expected_tables == set(result.paths.keys())
     assert (tmp_path / "data_dictionary.csv").exists()
+    assert (tmp_path / "run_manifests" / f"{result.snapshot_id}.json").exists()
+
+    with open(tmp_path / "snapshots.csv", encoding="utf-8") as handle:
+        snapshot_rows = list(csv.DictReader(handle))
+    assert len(snapshot_rows) == 1
+    assert snapshot_rows[0]["account_label"] == "A_speed"
+    assert snapshot_rows[0]["run_type"] == "baseline"
+    assert snapshot_rows[0]["playtime_minutes_since_last_snapshot"] == "15"
+    assert snapshot_rows[0]["schema_version"] == str(SCHEMA_VERSION)
+
+    with open(tmp_path / "snapshot_tags.csv", encoding="utf-8") as handle:
+        tag_rows = list(csv.DictReader(handle))
+    assert [row["tag"] for row in tag_rows] == ["session_start", "baseline"]
 
     with open(tmp_path / "characters.csv", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     assert len(rows) == 2
     assert rows[0]["snapshot_id"] == rows[1]["snapshot_id"]
 
+    manifest = json.loads((tmp_path / "run_manifests" / f"{result.snapshot_id}.json").read_text(encoding="utf-8"))
+    assert manifest["success"] is True
+    assert manifest["study_metadata"]["account_label"] == "A_speed"
+    assert manifest["table_row_counts"]["snapshot_tags"] == 2
+
 
 def test_append_mode(sample_save_data, tmp_path):
     export_tidy_csvs(sample_save_data, tmp_path, source_path="a", timestamp="2026-01-01T00:00:00Z")
-    export_tidy_csvs(sample_save_data, tmp_path, source_path="a", timestamp="2026-01-02T00:00:00Z", append=True)
+    result = export_tidy_csvs(sample_save_data, tmp_path, source_path="a", timestamp="2026-01-02T00:00:00Z", append=True)
 
     with open(tmp_path / "skills.csv", encoding="utf-8") as handle:
         content = handle.read()
     assert content.count("snapshot_id,char_index,char_name") == 1
+
+    manifest = json.loads((tmp_path / "run_manifests" / f"{result.snapshot_id}.json").read_text(encoding="utf-8"))
+    assert manifest["mode"] == "append"
+
+
+def test_dry_run_writes_nothing(sample_save_data, tmp_path):
+    result = export_tidy_csvs(
+        sample_save_data,
+        tmp_path / "dry-run",
+        source_path="a",
+        timestamp="2026-01-01T00:00:00Z",
+        dry_run=True,
+        metadata={"tags": ["preview"]},
+    )
+
+    assert result.dry_run is True
+    assert result.manifest_path is None
+    assert not (tmp_path / "dry-run").exists()
+
+
+def test_append_mode_rejects_old_schema(sample_save_data, tmp_path):
+    (tmp_path / "snapshots.csv").write_text("snapshot_id,timestamp,source_path\nold,2026-01-01T00:00:00Z,a\n", encoding="utf-8")
+    for table_name in [
+        "account_metrics",
+        "characters",
+        "skills",
+        "inventory_slots",
+        "equipment_slots",
+        "quests",
+        "cards",
+        "starsigns",
+    ]:
+        (tmp_path / f"{table_name}.csv").write_text("snapshot_id\n", encoding="utf-8")
+
+    with pytest.raises(ExportValidationError) as excinfo:
+        export_tidy_csvs(sample_save_data, tmp_path, source_path="a", timestamp="2026-01-02T00:00:00Z", append=True)
+
+    assert "Nutze ein neues Exportverzeichnis oder migriere den alten Export." in str(excinfo.value)
+
+
+def test_duplicate_key_validation(sample_save_data, tmp_path):
+    def duplicate_metrics(data, snapshot_id):
+        return [
+            {"snapshot_id": snapshot_id, "metric_name": "money", "metric_value": 1},
+            {"snapshot_id": snapshot_id, "metric_name": "money", "metric_value": 2},
+        ]
+
+    original = export_tidy.extract_tidy_account_metrics
+    export_tidy.extract_tidy_account_metrics = duplicate_metrics
+    try:
+        with pytest.raises(ExportValidationError) as excinfo:
+            export_tidy_csvs(sample_save_data, tmp_path, source_path="a", timestamp="2026-01-01T00:00:00Z")
+    finally:
+        export_tidy.extract_tidy_account_metrics = original
+
+    assert "Duplicate natural keys detected." in str(excinfo.value)
+
+
+def test_manifest_row_counts_match_written_rows(sample_save_data, tmp_path):
+    result = export_tidy_csvs(sample_save_data, tmp_path, source_path="a", timestamp="2026-01-01T00:00:00Z")
+    manifest = json.loads((tmp_path / "run_manifests" / f"{result.snapshot_id}.json").read_text(encoding="utf-8"))
+
+    with open(tmp_path / "characters.csv", encoding="utf-8") as handle:
+        characters_rows = list(csv.DictReader(handle))
+
+    assert manifest["table_row_counts"]["characters"] == len(characters_rows)

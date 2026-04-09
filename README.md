@@ -36,7 +36,7 @@ Standard-Export:
 bash scripts/export_tracker.sh
 ```
 
-In einen bestimmten Ordner:
+Bestimmten Zielordner verwenden:
 
 ```bash
 bash scripts/export_tracker.sh exports/latest
@@ -50,32 +50,95 @@ Standard-Export:
 powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1
 ```
 
-In einen bestimmten Ordner:
+Bestimmten Zielordner verwenden:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\latest
 ```
 
-## Kontinuierlich an dieselben Dateien anhängen
+## Studien-Metadaten beim Export
 
-Ja. Das Tool kann neue Snapshots an denselben Satz CSV-Dateien anhängen.
+Die Export-Skripte reichen zusaetzliche CLI-Flags direkt an `python -m idleon_reader`
+weiter. Damit koennt ihr jeden Snapshot sauber fuer die spaetere Analyse
+annotieren.
+
+Beispiel macOS / Linux:
+
+```bash
+bash scripts/export_tracker.sh exports/study_a \
+  --account-label A_speed \
+  --study-group pilot \
+  --session-id s01 \
+  --run-type baseline \
+  --strategy-label speed \
+  --playtime-minutes 15 \
+  --tag session_start \
+  --tag baseline
+```
+
+Beispiel Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\study_a `
+  --account-label A_speed `
+  --study-group pilot `
+  --session-id s01 `
+  --run-type baseline `
+  --strategy-label speed `
+  --playtime-minutes 15 `
+  --tag session_start `
+  --tag baseline
+```
+
+Verfuegbare Zusatzflags:
+
+- `--account-label`
+- `--study-group`
+- `--session-id`
+- `--run-type manual|baseline|checkpoint|session_end|milestone`
+- `--strategy-label`
+- `--notes`
+- `--playtime-minutes`
+- `--tag` mehrfach wiederholbar
+
+## Dry-Run / Vorschau
+
+Mit `--dry-run` wird der Export komplett gebaut und validiert, aber nichts auf
+die Platte geschrieben.
+
+macOS / Linux:
+
+```bash
+bash scripts/export_tracker.sh exports/preview --dry-run --account-label A_speed
+```
+
+Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\preview --dry-run --account-label A_speed
+```
+
+## Kontinuierlich an dieselben Dateien anhaengen
+
+Ja. Das Tool kann neue Snapshots an denselben Satz CSV-Dateien anhaengen.
 
 Wichtig:
 
-- es wird nicht an eine einzige Datei angehängt
+- es wird nicht an eine einzige Datei angehaengt
 - stattdessen werden dieselben Tabellen im Zielordner erweitert
-- verbunden werden die Datensaetze über `snapshot_id`
+- verbunden werden die Datensaetze ueber `snapshot_id`
+- Append auf alte Exporte mit abweichendem Schema wird bewusst blockiert
 
-### macOS / Linux
+macOS / Linux:
 
 ```bash
-bash scripts/export_tracker.sh exports/history --append
+bash scripts/export_tracker.sh exports/history --append --session-id s02 --tag session_end
 ```
 
-### Windows
+Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\history --append
+powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\history --append --session-id s02 --tag session_end
 ```
 
 ## Exportierte Dateien
@@ -83,6 +146,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 ex
 Ein Export erzeugt:
 
 - `snapshots.csv`
+- `snapshot_tags.csv`
 - `account_metrics.csv`
 - `characters.csv`
 - `skills.csv`
@@ -92,8 +156,9 @@ Ein Export erzeugt:
 - `cards.csv`
 - `starsigns.csv`
 - `data_dictionary.csv`
+- `run_manifests/<snapshot_id>.json`
 
-## Optional: CLI-Output anzeigen
+## CLI-Output anzeigen
 
 Wenn du nur den sichtbaren Extractor-Output sehen willst:
 
