@@ -1,6 +1,21 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Invoke-NativeOrThrow {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Command,
+
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]] $Arguments
+    )
+
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code $LASTEXITCODE: $Command $($Arguments -join ' ')"
+    }
+}
+
 $RootDir = Split-Path -Parent $PSScriptRoot
 Set-Location $RootDir
 
@@ -17,7 +32,11 @@ elseif ($args.Count -ge 1) {
 }
 
 if (-not (Test-Path ".venv")) {
-    powershell -ExecutionPolicy Bypass -File .\scripts\install_tracker_windows.ps1 | Out-Null
+    Invoke-NativeOrThrow powershell -ExecutionPolicy Bypass -File .\scripts\install_tracker_windows.ps1
+}
+
+if (-not (Test-Path ".venv")) {
+    throw "Virtual environment directory is missing after installation: $RootDir\.venv"
 }
 
 $ActivateScript = Join-Path $RootDir ".venv\Scripts\Activate.ps1"
@@ -26,11 +45,13 @@ if (-not (Test-Path $ActivateScript)) {
 }
 
 . $ActivateScript
-python -c "import idleon_reader" 2>$null
-if ($LASTEXITCODE -ne 0) {
-    python -m pip install -e . | Out-Null
+try {
+    Invoke-NativeOrThrow python -c "import idleon_reader"
+}
+catch {
+    Invoke-NativeOrThrow python -m pip install -e .
 }
 
 $cmd = @("-m", "idleon_reader", "--csv", $OutputDir) + $ExtraArgs
 
-python @cmd
+Invoke-NativeOrThrow python @cmd

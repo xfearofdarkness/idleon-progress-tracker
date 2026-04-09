@@ -1,6 +1,21 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Invoke-NativeOrThrow {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Command,
+
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]] $Arguments
+    )
+
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code $LASTEXITCODE: $Command $($Arguments -join ' ')"
+    }
+}
+
 $RootDir = Split-Path -Parent $PSScriptRoot
 Set-Location $RootDir
 
@@ -9,7 +24,11 @@ if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
 }
 
 if (-not (Test-Path ".venv")) {
-    py -3 -m venv .venv
+    Invoke-NativeOrThrow py -3 -m venv .venv
+}
+
+if (-not (Test-Path ".venv")) {
+    throw "Virtual environment directory was not created: $RootDir\.venv"
 }
 
 $ActivateScript = Join-Path $RootDir ".venv\Scripts\Activate.ps1"
@@ -19,8 +38,8 @@ if (-not (Test-Path $ActivateScript)) {
 
 . $ActivateScript
 
-python -m pip install --upgrade pip setuptools wheel | Out-Null
-python -m pip install -e . | Out-Null
+Invoke-NativeOrThrow python -m pip install --upgrade pip setuptools wheel
+Invoke-NativeOrThrow python -m pip install -e .
 
 $bundledLevelDbUtil = Join-Path $RootDir "tools\leveldbutil.exe"
 if ((-not $env:IDLEON_LEVELDBUTIL) -and (Test-Path $bundledLevelDbUtil)) {
