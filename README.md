@@ -1,14 +1,16 @@
 # IdleOn Progress Tracker
 
-Extrahiert lokale Save-Daten aus **Legends of Idleon** und exportiert sie als
-klare, analysierbare CSV-Datensaetze fuer R oder Python.
+Liest lokale Save-Daten aus **Legends of Idleon** und exportiert sie als
+saubere, analysierbare CSV-Datensaetze fuer Data-Science-Workflows in R oder
+Python.
 
-Der Fokus liegt jetzt auf einem Data-Science-Workflow:
+Das Tool ist auf einen klaren Forschungs- und Projekt-Workflow ausgelegt:
 
 - automatische Erkennung von IdleOn-Saves auf macOS, Windows und CrossOver
-- lesender Zugriff ohne Spielmodifikation
+- rein lesender Zugriff ohne Aenderung am Spielstand
 - normalisierte CSV-Tabellen mit stabilen Join-Schluesseln
-- `data_dictionary.csv` zur Dokumentation
+- dokumentierte Spalten ueber `data_dictionary.csv`
+- keine vorgefertigte Analyse- oder Plot-Logik im Export
 
 ## Schnellstart
 
@@ -22,17 +24,22 @@ pip install -e .
 # Speicherort pruefen
 python -m idleon_reader --info
 
-# Bericht anzeigen
+# Menschenlesbaren Bericht anzeigen
 python -m idleon_reader
 
-# CSV-Bundle fuer R erzeugen
+# CSV-Datensaetze exportieren
 python -m idleon_reader --csv exports/latest
+```
 
-# Reinen Extractor-Output sehen
+Wenn du nur den direkten CLI-Output des Extractors sehen willst:
+
+```bash
 bash scripts/show_extractor_output.sh
 ```
 
-Danach liegen in `exports/latest/` unter anderem:
+## Exportierte Datensaetze
+
+Ein Export nach `exports/latest/` erzeugt diese Dateien:
 
 - `snapshots.csv`
 - `account_metrics.csv`
@@ -45,16 +52,13 @@ Danach liegen in `exports/latest/` unter anderem:
 - `starsigns.csv`
 - `data_dictionary.csv`
 
-## Was Ist Neu
-
-Der Export ist auf eindeutige Datensaetze ausgelegt:
+Der Export ist bewusst auf eindeutige, auswertbare Tabellen ausgelegt:
 
 - `snapshot_id` verbindet alle Tabellen
 - eine Beobachtung pro Zeile
 - feste, dokumentierte Spalten
-- JSON-Zellen nur dort, wo rohe Unterstrukturen sinnvoll erhalten bleiben
-- leere Tabellen werden trotzdem mit Header geschrieben
-- keine vorgefertigte Analyse-Logik im Export
+- JSON-Zellen nur dort, wo rohe Unterstrukturen erhalten bleiben sollen
+- auch leere Tabellen werden mit Header geschrieben
 
 ## Plattformen
 
@@ -66,41 +70,42 @@ Der Export ist auf eindeutige Datensaetze ausgelegt:
 
 ### Windows
 
-Windows wird unterstuetzt, wenn eines dieser Backends verfuegbar ist:
+Windows funktioniert, wenn mindestens ein nutzbarer LevelDB-Zugriff vorhanden
+ist:
 
-1. `plyvel` funktioniert in der jeweiligen Python-Umgebung
+1. `plyvel` funktioniert in der lokalen Python-Umgebung
 2. `leveldbutil.exe` liegt auf `PATH`
 3. `leveldbutil.exe` liegt im Repo unter `tools/leveldbutil.exe`
 4. `IDLEON_LEVELDBUTIL` zeigt auf die Binary
 
-Der praktikabelste Team-Weg fuer Windows ist:
+Fuer Teams ist der pragmatischste Weg:
 
 1. Eine Person baut `leveldbutil.exe` einmal.
-2. Die Datei wird unter `tools/leveldbutil.exe` eingecheckt oder intern verteilt.
-3. Alle Windows-Nutzer verwenden danach denselben Repo-Stand.
+2. Die Binary wird unter `tools/leveldbutil.exe` abgelegt oder intern verteilt.
+3. Alle Windows-Nutzer verwenden denselben Repo-Stand.
 
-Die Detailanleitung steht in [SETUP.md](/Users/jamiehuta/src/t3 code/Idleon Mod/idleon-progress-tracker/SETUP.md).
+Die genauere Anleitung steht in [SETUP.md](/Users/jamiehuta/src/t3 code/Idleon Mod/idleon-progress-tracker/SETUP.md).
 
 ## CLI
 
 ```bash
-# Auto-Erkennung
+# Auto-Erkennung und Bericht
 python -m idleon_reader
 
 # Speicherort anzeigen
 python -m idleon_reader --info
 
-# Rohdaten als JSON
+# Rohdaten als JSON exportieren
 python -m idleon_reader --json --output save.json
 
-# R-/CSV-Export
+# CSV-Datensaetze exportieren
 python -m idleon_reader --csv exports/latest
 
-# Nur CLI-Output zeigen
-bash scripts/show_extractor_output.sh
-
-# Zeitreihen: an bestehende CSVs anhaengen
+# Mehrere Zeitpunkte in dieselben CSVs schreiben
 python -m idleon_reader --csv exports/history --append
+
+# Nur den sichtbaren CLI-Output des Extractors zeigen
+bash scripts/show_extractor_output.sh
 ```
 
 ## Tests
@@ -114,8 +119,8 @@ pytest -q
 
 - Das Tool liest nur Daten.
 - IdleOn wird nicht gepatcht oder veraendert.
-- Wenn du Teammitglieder auf Windows hast, nutzt die Setup-Anleitung und die
-  Skripte in `scripts/`.
+- Fuer Team-Setups auf Windows sind die Skripte in `scripts/` und die Hinweise
+  in `SETUP.md` relevant.
 
 ## Lizenz
 
