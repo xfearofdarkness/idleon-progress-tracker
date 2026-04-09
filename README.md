@@ -27,6 +27,9 @@ python -m idleon_reader
 
 # CSV-Bundle fuer R erzeugen
 python -m idleon_reader --csv exports/latest
+
+# Reinen Extractor-Output sehen
+bash scripts/show_extractor_output.sh
 ```
 
 Danach liegen in `exports/latest/` unter anderem:
@@ -70,6 +73,12 @@ Windows wird unterstuetzt, wenn eines dieser Backends verfuegbar ist:
 3. `leveldbutil.exe` liegt im Repo unter `tools/leveldbutil.exe`
 4. `IDLEON_LEVELDBUTIL` zeigt auf die Binary
 
+Der praktikabelste Team-Weg fuer Windows ist:
+
+1. Eine Person baut `leveldbutil.exe` einmal.
+2. Die Datei wird unter `tools/leveldbutil.exe` eingecheckt oder intern verteilt.
+3. Alle Windows-Nutzer verwenden danach denselben Repo-Stand.
+
 Die Detailanleitung steht in [SETUP.md](/Users/jamiehuta/src/t3 code/Idleon Mod/idleon-progress-tracker/SETUP.md).
 
 ## CLI
@@ -86,6 +95,9 @@ python -m idleon_reader --json --output save.json
 
 # R-/CSV-Export
 python -m idleon_reader --csv exports/latest
+
+# Nur CLI-Output zeigen
+bash scripts/show_extractor_output.sh
 
 # Zeitreihen: an bestehende CSVs anhaengen
 python -m idleon_reader --csv exports/history --append

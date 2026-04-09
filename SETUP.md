@@ -7,7 +7,7 @@ Alle Teammitglieder sollen denselben Export erzeugen koennen:
 - gleicher CLI-Aufruf
 - gleiche CSV-Tabellen
 - gleiche Join-Keys
-- gleiche R-Starterdatei
+- gleiche dokumentierte Spalten
 
 ## macOS
 
@@ -50,6 +50,13 @@ gibt es zwei praktikable Wege:
 
 Der robusteste Weg fuer das Team ist `leveldbutil.exe`.
 
+Wichtig:
+
+- Fuer das Team ist es besser, eine funktionierende `leveldbutil.exe` zentral
+  bereitzustellen, statt mehrere lokale Build-Varianten zu pflegen.
+- Das Repo unterstuetzt dafuer direkt `tools\leveldbutil.exe`.
+- Alternativ kann jede Person `IDLEON_LEVELDBUTIL` auf einen lokalen Pfad setzen.
+
 ### 1. Projekt einrichten
 
 In PowerShell:
@@ -76,12 +83,40 @@ Beispiel:
 $env:IDLEON_LEVELDBUTIL = "C:\tools\leveldbutil.exe"
 ```
 
+### 2a. Woher bekommt man leveldbutil.exe?
+
+Aktuell sind zwei Wege realistisch:
+
+1. Eine Person baut die offizielle `google/leveldb`-Utility auf Windows mit
+   CMake und Visual Studio und legt die entstandene `leveldbutil.exe` unter
+   `tools\leveldbutil.exe` ab.
+2. Ihr verteilt intern eine bereits funktionierende `leveldbutil.exe` und
+   referenziert sie ueber `IDLEON_LEVELDBUTIL`.
+
+Fuer dieses Projekt ist Weg 1 oder eine bereits im Team verteilte Binary
+praktischer als individuelle lokale Build-Loesungen.
+
 ### 3. Export testen
 
 ```powershell
 python -m idleon_reader --info
 python -m idleon_reader
 python -m idleon_reader --csv exports\latest
+```
+
+### 4. Nur den direkten Extractor-Output sehen
+
+macOS/Linux:
+
+```bash
+bash scripts/show_extractor_output.sh
+```
+
+Windows PowerShell:
+
+```powershell
+python -m idleon_reader --info
+python -m idleon_reader
 ```
 
 ## Gemeinsamer R-Workflow
