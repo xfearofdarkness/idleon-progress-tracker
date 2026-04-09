@@ -6,8 +6,7 @@ function Invoke-NativeOrThrow {
         [Parameter(Mandatory = $true)]
         [string] $Command,
 
-        [Parameter(ValueFromRemainingArguments = $true)]
-        [string[]] $Arguments
+        [string[]] $Arguments = @()
     )
 
     & $Command @Arguments
@@ -75,7 +74,7 @@ elseif ($args.Count -ge 1) {
 }
 
 if (-not (Test-WindowsVenv $RootDir)) {
-    Invoke-NativeOrThrow powershell -ExecutionPolicy Bypass -File .\scripts\install_tracker_windows.ps1
+    Invoke-NativeOrThrow -Command powershell -Arguments @("-ExecutionPolicy", "Bypass", "-File", ".\\scripts\\install_tracker_windows.ps1")
 }
 
 $ActivateScript = Join-Path $RootDir ".venv\Scripts\Activate.ps1"
@@ -85,12 +84,12 @@ if (-not (Test-WindowsVenv $RootDir)) {
 
 . $ActivateScript
 try {
-    Invoke-NativeOrThrow python -c "import idleon_reader"
+    Invoke-NativeOrThrow -Command python -Arguments @("-c", "import idleon_reader")
 }
 catch {
-    Invoke-NativeOrThrow python -m pip install -e .
+    Invoke-NativeOrThrow -Command python -Arguments @("-m", "pip", "install", "-e", ".")
 }
 
 $cmd = @("-m", "idleon_reader", "--csv", $OutputDir) + $ExtraArgs
 
-Invoke-NativeOrThrow python @cmd
+Invoke-NativeOrThrow -Command python -Arguments $cmd
