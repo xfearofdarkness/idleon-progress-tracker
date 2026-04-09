@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "idleon-progress-tracker"
+version = "1.0.0"
+description = "Extracts player progress from local Legends of Idleon (lavaflame2) save files without modifying the game."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "IdleOn Progress Tracker" },
+]
+
+keywords = ["idleon", "legends-of-idleon", "lavaflame2", "save-reader", "progress-tracker"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Games/Entertainment",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+# plyvel provides faster LevelDB access but requires C compilation.
+# The tool works without it using the built-in raw parser.
+fast = ["plyvel>=2.0.0"]
+dev = ["pytest>=7.0", "pytest-cov"]
+
+[project.scripts]
+idleon-progress = "idleon_reader.main:main"
+
+[tool.setuptools.packages.find]
+include = ["idleon_reader*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

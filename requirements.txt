@@ -1,0 +1,7 @@
+# Core dependencies - none required! The tool works with pure Python.
+#
+# Optional: Install plyvel for faster LevelDB access:
+#   pip install plyvel
+#
+# Note: plyvel requires a C compiler and can be tricky on Windows.
+# The tool's built-in raw parser works without it.
