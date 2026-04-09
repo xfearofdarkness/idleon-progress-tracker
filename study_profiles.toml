@@ -1,0 +1,38 @@
+[study]
+default_export_root = "exports/study"
+default_study_group = "main"
+allowed_tags = [
+  "baseline",
+  "session_start",
+  "session_end",
+  "reached_level_5",
+  "reached_level_10",
+  "reached_level_20",
+  "class_advance",
+  "quest_milestone",
+  "boss_unlock",
+]
+allowed_milestone_tags = [
+  "reached_level_5",
+  "reached_level_10",
+  "reached_level_20",
+  "class_advance",
+  "quest_milestone",
+  "boss_unlock",
+]
+allowed_run_types = ["baseline", "checkpoint", "session_end", "milestone"]
+
+[accounts.A_speed]
+account_label = "A_speed"
+strategy_label = "speed"
+export_subdir = "A_speed"
+
+[accounts.B_skills]
+account_label = "B_skills"
+strategy_label = "skills"
+export_subdir = "B_skills"
+
+[accounts.C_balanced]
+account_label = "C_balanced"
+strategy_label = "balanced"
+export_subdir = "C_balanced"

@@ -26,6 +26,8 @@ Thumbs.db
 # Output files
 *.json
 !tests/fixtures/*.json
+study_local.toml
+.idleon-study/
 
 # Logs
 *.log

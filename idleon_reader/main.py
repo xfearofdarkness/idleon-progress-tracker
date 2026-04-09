@@ -386,9 +386,16 @@ def _print_export_summary(result):
             print(f"    - {warning}")
 
 
-def main():
+def main(argv: Optional[list[str]] = None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+
+    if argv and argv[0] == "study":
+        from .study_cli import run_study_cli
+
+        sys.exit(run_study_cli(argv[1:]))
+
     parser = create_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.info:
         cmd_info()
