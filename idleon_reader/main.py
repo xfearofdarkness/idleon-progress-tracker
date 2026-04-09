@@ -23,6 +23,11 @@ from .finder import find_save_directory, get_save_info
 from .ldb_reader import read_save_data
 from .progress import extract_progress_summary, format_progress_report
 from .export_tidy import ExportValidationError, RUN_TYPE_CHOICES, export_tidy_csvs
+from .save_accounts import (
+    SaveAccountSelectionError,
+    format_save_account_candidates,
+    select_save_account,
+)
 
 
 def _non_negative_int(value: str) -> int:
@@ -92,6 +97,17 @@ def create_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="DIR",
         help="Exportiere tidy CSVs fuer R-Analyse in das angegebene Verzeichnis",
+    )
+    parser.add_argument(
+        "--save-account",
+        type=str,
+        default="",
+        help="Waehle bei mehreren erkannten Save-Accounts einen selector oder eine Nummer",
+    )
+    parser.add_argument(
+        "--list-save-accounts",
+        action="store_true",
+        help="Zeige erkannte Save-Accounts im LevelDB-Save an und beende das Programm",
     )
     parser.add_argument(
         "--append",
@@ -235,11 +251,30 @@ def cmd_read(args):
 
     print(f"[*] {len(raw_data)} Schluessel gelesen.")
 
+    try:
+        selected_data, selected_candidate, candidates = select_save_account(
+            raw_data,
+            selector=args.save_account,
+            allow_prompt=not args.list_save_accounts,
+        )
+    except SaveAccountSelectionError as exc:
+        print(f"[!] {exc}")
+        sys.exit(1)
+
+    if args.list_save_accounts:
+        if not candidates:
+            print("[*] Keine getrennten Save-Accounts erkannt.")
+        else:
+            print("\n  Erkannte Save-Accounts:")
+            for line in format_save_account_candidates(candidates):
+                print(line)
+        return
+
     # Handle --raw-keys
     if args.raw_keys:
         print("\n  Gefundene Schluessel:")
-        for key in sorted(raw_data.keys()):
-            val = raw_data[key]
+        for key in sorted(selected_data.keys()):
+            val = selected_data[key]
             type_info = type(val).__name__
             size_info = ""
             if isinstance(val, (list, dict)):
@@ -251,8 +286,8 @@ def cmd_read(args):
 
     # Handle --key
     if args.key:
-        if args.key in raw_data:
-            value = raw_data[args.key]
+        if args.key in selected_data:
+            value = selected_data[args.key]
             if args.json:
                 output = json.dumps(value, indent=2, ensure_ascii=False, default=str)
             else:
@@ -260,7 +295,7 @@ def cmd_read(args):
             _write_output(output, args.output)
         else:
             print(f"[!] Schluessel '{args.key}' nicht gefunden.")
-            print(f"    Verfuegbare Schluessel: {', '.join(sorted(raw_data.keys()))}")
+            print(f"    Verfuegbare Schluessel: {', '.join(sorted(selected_data.keys()))}")
             sys.exit(1)
         return
 
@@ -299,7 +334,7 @@ def cmd_read(args):
         }
         try:
             result = export_tidy_csvs(
-                raw_data,
+                selected_data,
                 output_dir=args.csv,
                 source_path=source,
                 append=args.append,
@@ -326,6 +361,8 @@ def cmd_read(args):
     if args.json:
         print("[*] Exportiere Rohdaten als JSON...")
         output = json.dumps(raw_data, indent=2, ensure_ascii=False, default=str)
+        if selected_candidate is not None:
+            output = json.dumps(selected_data, indent=2, ensure_ascii=False, default=str)
         _write_output(output, args.output)
         if args.output:
             print(f"[*] Daten exportiert nach: {args.output}")
@@ -333,8 +370,10 @@ def cmd_read(args):
 
     # Default: formatted progress report
     print("[*] Analysiere Spielerfortschritt...")
-    summary = extract_progress_summary(raw_data)
+    summary = extract_progress_summary(selected_data)
     report = format_progress_report(summary)
+    if selected_candidate is not None:
+        report = f"Save-Account: {selected_candidate.selector}\n{report}"
     _write_output(report, args.output)
 
     if args.output:

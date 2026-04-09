@@ -17,3 +17,10 @@ def test_repeatable_tags_preserve_order():
         "--tag", "level_10",
     ])
     assert args.tag == ["session_start", "level_10"]
+
+
+def test_save_account_flags_are_parsed():
+    parser = create_parser()
+    args = parser.parse_args(["--save-account", "2", "--list-save-accounts"])
+    assert args.save_account == "2"
+    assert args.list_save_accounts is True
