@@ -12,7 +12,12 @@ if (-not (Test-Path ".venv")) {
     py -3 -m venv .venv
 }
 
-. .\.venv\Scripts\Activate.ps1
+$ActivateScript = Join-Path $RootDir ".venv\Scripts\Activate.ps1"
+if (-not (Test-Path $ActivateScript)) {
+    throw "Virtual environment activation script not found: $ActivateScript"
+}
+
+. $ActivateScript
 
 python -m pip install --upgrade pip setuptools wheel | Out-Null
 python -m pip install -e . | Out-Null
