@@ -6,40 +6,99 @@ function Invoke-NativeOrThrow {
         [Parameter(Mandatory = $true)]
         [string] $Command,
 
-        [Parameter(ValueFromRemainingArguments = $true)]
-        [string[]] $Arguments
+        [string[]] $Arguments = @()
     )
 
     & $Command @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "Command failed with exit code $LASTEXITCODE: $Command $($Arguments -join ' ')"
+        throw "Command failed with exit code ${LASTEXITCODE}: $Command $($Arguments -join ' ')"
+    }
+}
+
+function Get-PythonCommandSource {
+    $command = Get-Command python -ErrorAction SilentlyContinue
+    if ($null -eq $command) {
+        return ""
+    }
+    return $command.Source
+}
+
+function Assert-UsablePython {
+    $pythonSource = Get-PythonCommandSource
+    if (-not $pythonSource) {
+        throw "'python' was not found on PATH. Install Python 3.10+ and reopen PowerShell."
+    }
+
+    & python --version *> $null
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    if ($pythonSource -like "*WindowsApps*") {
+        throw (
+            "'python' currently points to the Microsoft Store alias ($pythonSource). " +
+            "Install a real Python 3.10+ and disable the App execution aliases for python.exe/python3.exe " +
+            "under Settings > Apps > Advanced app settings > App execution aliases."
+        )
+    }
+
+    throw "'python' is on PATH but not usable: $pythonSource"
+}
+
+function Test-WindowsVenv {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $RootPath
+    )
+
+    $activateScript = Join-Path $RootPath ".venv\Scripts\Activate.ps1"
+    $pythonExe = Join-Path $RootPath ".venv\Scripts\python.exe"
+    return (Test-Path $activateScript) -and (Test-Path $pythonExe)
+}
+
+function Remove-VenvIfPresent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $RootPath
+    )
+
+    $venvPath = Join-Path $RootPath ".venv"
+    if (Test-Path $venvPath) {
+        Remove-Item -Recurse -Force $venvPath
     }
 }
 
 $RootDir = Split-Path -Parent $PSScriptRoot
 Set-Location $RootDir
 
-if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
-    throw "Python launcher 'py' not found."
+Assert-UsablePython
+
+if (-not (Test-WindowsVenv $RootDir)) {
+    $existingBinPython = Join-Path $RootDir ".venv\bin\python"
+    if (Test-Path (Join-Path $RootDir ".venv")) {
+        Write-Host "Existing virtual environment is missing Windows Scripts/ and will be recreated."
+        if (Test-Path $existingBinPython) {
+            Write-Host "Detected a POSIX-style venv (.venv\\bin\\python), likely created by a non-Windows Python."
+        }
+    }
+
+    Remove-VenvIfPresent $RootDir
+    Invoke-NativeOrThrow -Command python -Arguments @("-m", "venv", ".venv")
+
+    if (-not (Test-WindowsVenv $RootDir)) {
+        throw "Could not create a Windows-compatible virtual environment with python."
+    }
 }
 
-if (-not (Test-Path ".venv")) {
-    Invoke-NativeOrThrow py -3 -m venv .venv
-}
-
-if (-not (Test-Path ".venv")) {
-    throw "Virtual environment directory was not created: $RootDir\.venv"
+if (-not (Test-WindowsVenv $RootDir)) {
+    throw "Windows virtual environment is invalid: $RootDir\.venv"
 }
 
 $ActivateScript = Join-Path $RootDir ".venv\Scripts\Activate.ps1"
-if (-not (Test-Path $ActivateScript)) {
-    throw "Virtual environment activation script not found: $ActivateScript"
-}
-
 . $ActivateScript
 
-Invoke-NativeOrThrow python -m pip install --upgrade pip setuptools wheel
-Invoke-NativeOrThrow python -m pip install -e .
+Invoke-NativeOrThrow -Command python -Arguments @("-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel")
+Invoke-NativeOrThrow -Command python -Arguments @("-m", "pip", "install", "-e", ".")
 
 $bundledLevelDbUtil = Join-Path $RootDir "tools\leveldbutil.exe"
 if ((-not $env:IDLEON_LEVELDBUTIL) -and (Test-Path $bundledLevelDbUtil)) {
