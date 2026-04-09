@@ -15,7 +15,7 @@ Das Tool ist auf einen klaren Forschungs- und Projekt-Workflow ausgelegt:
 ## Schnellstart
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/xfearofdarkness/idleon-progress-tracker.git
 cd idleon-progress-tracker
 python3 -m venv .venv
 source .venv/bin/activate

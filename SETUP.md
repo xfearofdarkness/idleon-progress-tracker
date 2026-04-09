@@ -21,7 +21,7 @@ python3 --version
 ### 2. Projekt einrichten
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/xfearofdarkness/idleon-progress-tracker.git
 cd idleon-progress-tracker
 python3 -m venv .venv
 source .venv/bin/activate
@@ -62,7 +62,7 @@ Wichtig:
 In PowerShell:
 
 ```powershell
-git clone <repo-url>
+git clone https://github.com/xfearofdarkness/idleon-progress-tracker.git
 cd idleon-progress-tracker
 py -3 -m venv .venv
 .venv\Scripts\Activate.ps1
