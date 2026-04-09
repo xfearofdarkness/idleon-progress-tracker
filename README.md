@@ -1,7 +1,7 @@
 # IdleOn Progress Tracker
 
 Liest lokale Save-Daten aus **Legends of Idleon** und exportiert sie als
-saubere CSV-Datensaetze fuer ein Data-Science-Projekt.
+saubere CSV-Datensätze für ein Data-Science-Projekt.
 
 ## Installation
 
@@ -21,7 +21,7 @@ cd idleon-progress-tracker
 powershell -ExecutionPolicy Bypass -File .\scripts\install_tracker_windows.ps1
 ```
 
-Hinweis fuer Windows:
+Hinweis für Windows:
 
 - `tools/leveldbutil.exe` liegt bereits im Repo
 - dadurch muss auf Windows niemand `leveldb` selbst bauen
@@ -58,8 +58,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 ex
 
 ## Studien-Metadaten beim Export
 
-Die Export-Skripte reichen zusaetzliche CLI-Flags direkt an `python -m idleon_reader`
-weiter. Damit koennt ihr jeden Snapshot sauber fuer die spaetere Analyse
+Die Export-Skripte reichen zusätzliche CLI-Flags direkt an `python -m idleon_reader`
+weiter. Damit könnt ihr jeden Snapshot sauber für die spätere Analyse
 annotieren.
 
 Beispiel macOS / Linux:
@@ -90,7 +90,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 ex
   --tag baseline
 ```
 
-Verfuegbare Zusatzflags:
+Verfügbare Zusatzflags:
 
 - `--account-label`
 - `--study-group`
@@ -118,15 +118,15 @@ Windows:
 powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\preview --dry-run --account-label A_speed
 ```
 
-## Kontinuierlich an dieselben Dateien anhaengen
+## Kontinuierlich an dieselben Dateien anhängen
 
-Ja. Das Tool kann neue Snapshots an denselben Satz CSV-Dateien anhaengen.
+Ja. Das Tool kann neue Snapshots an denselben Satz CSV-Dateien anhängen.
 
 Wichtig:
 
-- es wird nicht an eine einzige Datei angehaengt
+- es wird nicht an eine einzige Datei angehängt
 - stattdessen werden dieselben Tabellen im Zielordner erweitert
-- verbunden werden die Datensaetze ueber `snapshot_id`
+- verbunden werden die Datensätze über `snapshot_id`
 - Append auf alte Exporte mit abweichendem Schema wird bewusst blockiert
 
 macOS / Linux:
@@ -175,7 +175,7 @@ bash scripts/show_extractor_output.sh extractor-output.log
 ## Hinweise
 
 - Das Tool liest nur Daten.
-- IdleOn wird nicht gepatcht oder veraendert.
+- IdleOn wird nicht gepatcht oder verändert.
 - Es wird keine Analyse- oder Plot-Logik mitexportiert, nur Daten.
 
 ## Lizenz
