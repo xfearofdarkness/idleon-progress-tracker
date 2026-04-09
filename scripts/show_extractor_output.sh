@@ -14,7 +14,9 @@ if [ ! -d ".venv" ]; then
 fi
 
 source .venv/bin/activate
-PIP_DISABLE_PIP_VERSION_CHECK=1 pip install -e . >/dev/null
+if ! python -c "import idleon_reader" >/dev/null 2>&1; then
+  PIP_DISABLE_PIP_VERSION_CHECK=1 python -m pip install -e . >/dev/null
+fi
 
 OUTPUT_LOG="${1:-}"
 

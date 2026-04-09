@@ -61,11 +61,29 @@ python -m idleon_reader
 python -m idleon_reader --csv exports/latest
 ```
 
+Oder ueber das Export-Skript:
+
+```bash
+bash scripts/export_tracker.sh
+```
+
 ### Mehrere Zeitpunkte in dieselben CSVs schreiben
 
 ```bash
 python -m idleon_reader --csv exports/history --append
 ```
+
+Oder ueber das Export-Skript:
+
+```bash
+bash scripts/export_tracker.sh exports/history --append
+```
+
+Wichtig:
+
+- `--append` haengt an dieselben CSV-Dateien im Zielordner an
+- es gibt dabei nicht eine einzige Sammeldatei, sondern weiterhin eine Datei pro Tabelle
+- fuer Zeitreihen ist also `exports/history/` als gemeinsamer Ordner gedacht
 
 ### Sichtbaren CLI-Output des Extractors anzeigen
 
@@ -89,6 +107,14 @@ Die Installationsskripte:
 - pruefen die wichtigsten Voraussetzungen
 - geben die naechsten Befehle zum Testen aus
 
+Die Export-Skripte:
+
+- `scripts/export_tracker.sh`
+- `scripts/export_tracker_windows.ps1`
+
+starten direkt die Datenextraktion und schreiben die CSV-Dateien in einen
+Ausgabeordner.
+
 ## Plattformhinweise
 
 ### macOS
@@ -102,6 +128,8 @@ Die Installationsskripte:
 - das Repo enthaelt bereits `tools/leveldbutil.exe`
 - der Reader nutzt die Datei automatisch
 - falls noetig, kann zusaetzlich `IDLEON_LEVELDBUTIL` gesetzt werden
+- Export-Skript auf Windows:
+  `powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1`
 
 ## Tests
 

@@ -197,7 +197,7 @@ def cmd_read(args):
             sys.exit(1)
         return
 
-    # Handle --csv (tidy export for R)
+    # Handle --csv (tidy export)
     if args.csv:
         print(f"[*] Exportiere tidy CSVs nach: {args.csv}/")
         source = str(db_path)
@@ -211,14 +211,9 @@ def cmd_read(args):
             row_count = sum(1 for _ in open(filepath)) - 1  # minus header
             print(f"    {table_name + '.csv':20s} {row_count:>5} Zeilen")
         mode = "angehaengt" if args.append else "geschrieben"
-        print(f"[*] Fertig ({mode}). Lade in R mit:")
-        print(f'    library(readr)')
-        print(f'    snapshots <- read_csv("{args.csv}/snapshots.csv")')
-        print(f'    chars     <- read_csv("{args.csv}/characters.csv")')
-        print(f'    skills    <- read_csv("{args.csv}/skills.csv")')
-        print(f'    inv       <- read_csv("{args.csv}/inventory_slots.csv")')
-        print(f'    quests    <- read_csv("{args.csv}/quests.csv")')
-        print(f'[*] Zusatzdatei: {args.csv}/data_dictionary.csv')
+        print(f"[*] Fertig ({mode}).")
+        print(f"[*] Datensaetze: {args.csv}/")
+        print(f"[*] Dokumentation: {args.csv}/data_dictionary.csv")
         return
 
     # Handle --json (raw export)
