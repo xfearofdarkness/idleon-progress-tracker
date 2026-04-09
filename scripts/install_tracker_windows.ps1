@@ -6,8 +6,7 @@ function Invoke-NativeOrThrow {
         [Parameter(Mandatory = $true)]
         [string] $Command,
 
-        [Parameter(ValueFromRemainingArguments = $true)]
-        [string[]] $Arguments
+        [string[]] $Arguments = @()
     )
 
     & $Command @Arguments
@@ -39,31 +38,11 @@ function Remove-VenvIfPresent {
     }
 }
 
-function Get-VenvCandidates {
-    $candidates = @()
-    if (Get-Command py -ErrorAction SilentlyContinue) {
-        $candidates += @{
-            Command = "py"
-            Arguments = @("-3", "-m", "venv", ".venv")
-            Label = "py -3"
-        }
-    }
-    if (Get-Command python -ErrorAction SilentlyContinue) {
-        $candidates += @{
-            Command = "python"
-            Arguments = @("-m", "venv", ".venv")
-            Label = "python"
-        }
-    }
-    return $candidates
-}
-
 $RootDir = Split-Path -Parent $PSScriptRoot
 Set-Location $RootDir
 
-$Candidates = Get-VenvCandidates
-if ($Candidates.Count -eq 0) {
-    throw "Neither 'py' nor 'python' was found on PATH."
+if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+    throw "'python' was not found on PATH."
 }
 
 if (-not (Test-WindowsVenv $RootDir)) {
@@ -75,25 +54,11 @@ if (-not (Test-WindowsVenv $RootDir)) {
         }
     }
 
-    $created = $false
-    foreach ($candidate in $Candidates) {
-        Remove-VenvIfPresent $RootDir
-        try {
-            Invoke-NativeOrThrow $candidate.Command @($candidate.Arguments)
-        }
-        catch {
-            continue
-        }
+    Remove-VenvIfPresent $RootDir
+    Invoke-NativeOrThrow -Command python -Arguments @("-m", "venv", ".venv")
 
-        if (Test-WindowsVenv $RootDir) {
-            $created = $true
-            break
-        }
-    }
-
-    if (-not $created) {
-        $candidateLabels = ($Candidates | ForEach-Object { $_.Label }) -join ", "
-        throw "Could not create a Windows-compatible virtual environment with: $candidateLabels"
+    if (-not (Test-WindowsVenv $RootDir)) {
+        throw "Could not create a Windows-compatible virtual environment with python."
     }
 }
 
@@ -104,8 +69,8 @@ if (-not (Test-WindowsVenv $RootDir)) {
 $ActivateScript = Join-Path $RootDir ".venv\Scripts\Activate.ps1"
 . $ActivateScript
 
-Invoke-NativeOrThrow python -m pip install --upgrade pip setuptools wheel
-Invoke-NativeOrThrow python -m pip install -e .
+Invoke-NativeOrThrow -Command python -Arguments @("-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel")
+Invoke-NativeOrThrow -Command python -Arguments @("-m", "pip", "install", "-e", ".")
 
 $bundledLevelDbUtil = Join-Path $RootDir "tools\leveldbutil.exe"
 if ((-not $env:IDLEON_LEVELDBUTIL) -and (Test-Path $bundledLevelDbUtil)) {
