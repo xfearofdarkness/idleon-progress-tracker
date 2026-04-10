@@ -169,7 +169,7 @@ def test_export_tidy_csvs(sample_save_data, tmp_path):
         source_path="test-save",
         timestamp="2026-01-01T00:00:00Z",
         metadata={
-            "account_label": "A_speed",
+            "account_label": "speed_run",
             "study_group": "pilot",
             "session_id": "s01",
             "run_type": "baseline",
@@ -199,7 +199,7 @@ def test_export_tidy_csvs(sample_save_data, tmp_path):
     with open(tmp_path / "snapshots.csv", encoding="utf-8") as handle:
         snapshot_rows = list(csv.DictReader(handle))
     assert len(snapshot_rows) == 1
-    assert snapshot_rows[0]["account_label"] == "A_speed"
+    assert snapshot_rows[0]["account_label"] == "speed_run"
     assert snapshot_rows[0]["run_type"] == "baseline"
     assert snapshot_rows[0]["playtime_minutes_since_last_snapshot"] == "15"
     assert snapshot_rows[0]["schema_version"] == str(SCHEMA_VERSION)
@@ -215,7 +215,7 @@ def test_export_tidy_csvs(sample_save_data, tmp_path):
 
     manifest = json.loads((tmp_path / "run_manifests" / f"{result.snapshot_id}.json").read_text(encoding="utf-8"))
     assert manifest["success"] is True
-    assert manifest["study_metadata"]["account_label"] == "A_speed"
+    assert manifest["study_metadata"]["account_label"] == "speed_run"
     assert manifest["table_row_counts"]["snapshot_tags"] == 2
 
 

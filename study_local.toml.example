@@ -1,15 +1,11 @@
 [local]
-# Optional default account on this machine
-default_account = "A_speed"
+# Optional default profile for study commands without --account
+# profile = "speed_run"
 
-[accounts.A_speed]
+# Optional if auto-detection is not enough
 # save_path = "/absolute/path/to/leveldb"
-# save_account = "mySave"
 
-[accounts.B_skills]
-# save_path = "/absolute/path/to/leveldb"
-# save_account = "mySave"
-
-[accounts.C_balanced]
-# save_path = "/absolute/path/to/leveldb"
-# save_account = "mySave"
+# Optional if one LevelDB save contains several logical accounts
+# 1. Run: python -m idleon_reader --list-save-accounts
+# 2. Copy the selector from the first column
+# save_selector = "mySave"

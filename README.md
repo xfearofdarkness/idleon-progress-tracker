@@ -1,11 +1,10 @@
 # IdleOn Progress Tracker
 
-Liest lokale Save-Daten aus **Legends of Idleon** und exportiert sie als
-saubere CSV-Datensätze für ein Data-Science-Projekt.
+Liest lokale IdleOn-Saves und exportiert saubere CSV-Datensätze für eure Auswertung.
 
 ## Installation
 
-### macOS / Linux
+macOS / Linux:
 
 ```bash
 git clone https://github.com/xfearofdarkness/idleon-progress-tracker.git
@@ -13,7 +12,7 @@ cd idleon-progress-tracker
 bash scripts/install_tracker.sh
 ```
 
-### Windows
+Windows:
 
 ```powershell
 git clone https://github.com/xfearofdarkness/idleon-progress-tracker.git
@@ -21,142 +20,119 @@ cd idleon-progress-tracker
 powershell -ExecutionPolicy Bypass -File .\scripts\install_tracker_windows.ps1
 ```
 
-Hinweis für Windows:
+`tools/leveldbutil.exe` liegt bereits im Repo. Auf Windows muss deshalb niemand LevelDB selbst bauen.
 
-- `tools/leveldbutil.exe` liegt bereits im Repo
-- dadurch muss auf Windows niemand `leveldb` selbst bauen
+## Schneller Export
 
-## Studien-Workflow
+Normale Übersicht:
 
-Für die eigentliche Erhebung ist der `study`-Workflow der empfohlene Einstieg.
-Er baut auf denselben CSV-Exports auf, reduziert aber manuelle Eingaben durch:
+```bash
+python -m idleon_reader
+```
 
-- feste Account-Profile in `study_profiles.toml`
-- lokale Save-Pfade in `study_local.toml`
-- automatische Session-IDs
-- aktiven Session-Kontext in `.idleon-study/current_session.json`
-- kontrollierte Run-Types und Tags
+CSV-Export:
 
-Die rohe Export-CLI bleibt weiterhin verfügbar, falls ihr einzelne Exporte
-manuell fahren wollt.
+```bash
+python -m idleon_reader --csv exports/latest
+```
 
-## Einmalige Study-Konfiguration
+Wenn ein Save mehrere logische Accounts enthält:
 
-Im Repo liegt bereits eine getrackte `study_profiles.toml` mit den drei
-Studienaccounts:
+```bash
+python -m idleon_reader --list-save-accounts
+python -m idleon_reader --save-account mySave --csv exports/latest
+```
 
-- `A_speed`
-- `B_skills`
-- `C_balanced`
+## Study-Workflow
 
-Einmal lokal initialisieren:
+Der `study`-Workflow ist für wiederholte Exporte mit festen Profilen gedacht.
+
+Wichtige Begriffe:
+
+- `Profilname`: der Name unter `[accounts.<name>]` in `study_profiles.toml`
+- `profile`: genau so ein Profilname
+- `save_selector`: ein Selector aus `python -m idleon_reader --list-save-accounts`
+
+Aktuelle Profilnamen im Repo:
+
+- `speed_run`
+- `skill_focus`
+- `balanced_run`
+
+Einmal initialisieren:
 
 ```bash
 python -m idleon_reader study init-config
 ```
 
-Danach `study_local.toml` öffnen und bei Bedarf lokale Save-Pfade oder einen
-`default_account` eintragen. Diese Datei ist bewusst git-ignoriert.
-
-Wichtige Dateien:
-
-- `study_profiles.toml`: getrackte Studienprofile und erlaubte Tags
-- `study_profiles.toml.example`: Vorlage
-- `study_local.toml`: lokale maschinenspezifische Overrides
-- `study_local.toml.example`: Vorlage
-- `.idleon-study/current_session.json`: aktiver Session-Zustand
-
-## Baseline-Workflow
-
-Der erste Snapshot eines neuen Accounts wird als Baseline ohne aktive Session
-erfasst.
+Dann `study_local.toml` ausfüllen. Das ist die lokale, git-ignorierte Datei für deinen Rechner.
 
 Beispiel:
 
-```bash
-python -m idleon_reader study baseline --account A_speed --tag baseline
+```toml
+[local]
+# Optionaler Standard für study-Kommandos ohne --account
+profile = "speed_run"
+
+# Optional, falls Auto-Erkennung nicht reicht
+save_path = "/absolute/path/to/leveldb"
+
+# Nur nötig, wenn ein LevelDB-Save mehrere logische Accounts enthält
+save_selector = "mySave"
 ```
 
-Optional könnt ihr zusätzlich setzen:
+Das ist absichtlich alles. Für normale Nutzung brauchst du lokal nur:
 
-- `--notes`
-- `--study-group`
-- `--save-path`
-- `--output-dir`
-- `--dry-run`
+- `profile`
+- optional `save_path`
+- optional `save_selector`
 
-## Session-Workflow
+Nur wenn ein einzelner Rechner je Profil verschiedene lokale Werte braucht, kannst du zusätzlich manuell `[accounts.<profilname>]`-Blöcke anlegen.
 
-### Session starten
+## Study-Befehle
+
+Baseline:
 
 ```bash
-python -m idleon_reader study session-start --account A_speed
+python -m idleon_reader study baseline --tag baseline
 ```
 
-Dabei passiert automatisch:
+Session starten:
 
-- Session-ID wird erzeugt, z. B. `A_speed-20260409-s01`
-- `run_type` wird auf `checkpoint` gesetzt
-- das Tag `session_start` wird ergänzt
-- der Session-Kontext wird lokal gespeichert
+```bash
+python -m idleon_reader study session-start
+```
 
-### Checkpoint erfassen
+Checkpoint:
 
 ```bash
 python -m idleon_reader study checkpoint --playtime-minutes 30
 ```
 
-Optional:
-
-- `--notes`
-- `--tag`
-- `--dry-run`
-
-### Milestone erfassen
+Milestone:
 
 ```bash
 python -m idleon_reader study milestone --tag reached_level_10 --playtime-minutes 45
 ```
 
-Für `milestone` sind nur Tags erlaubt, die in `study_profiles.toml` unter
-`allowed_milestone_tags` definiert sind.
-
-### Session beenden
+Session beenden:
 
 ```bash
 python -m idleon_reader study session-end --playtime-minutes 60
 ```
 
-Dabei passiert automatisch:
-
-- `run_type` wird auf `session_end` gesetzt
-- das Tag `session_end` wird ergänzt
-- nach erfolgreichem Export wird die aktive Session gelöscht
-
-## Status prüfen
+Status:
 
 ```bash
 python -m idleon_reader study status
 ```
 
-Die Ausgabe zeigt unter anderem:
+## Output
 
-- aktiven Account
-- Strategie
-- Session-ID
-- Save-Pfad
-- Exportpfad
-- Startzeit
-- letzte Snapshot-ID
-- letzten sinnvollen nächsten Schritt
-
-## Exportierte Dateien
-
-Ein Export erzeugt:
+Ein Export schreibt unter anderem:
 
 - `snapshots.csv`
 - `snapshot_tags.csv`
-- `account_metrics.csv`
 - `characters.csv`
 - `skills.csv`
 - `inventory_slots.csv`
@@ -164,90 +140,21 @@ Ein Export erzeugt:
 - `quests.csv`
 - `cards.csv`
 - `starsigns.csv`
+- `account_metrics.csv`
 - `data_dictionary.csv`
 - `run_manifests/<snapshot_id>.json`
 
-Die zentrale Join-Basis bleibt `snapshot_id`. Für Studienkontext kommen unter
-anderem diese Felder hinzu:
+Für Zeitreihen wird an dieselben CSV-Dateien angehängt. Alte Exportordner mit abweichendem Schema werden bewusst blockiert.
 
-- `account_label`
-- `study_group`
-- `session_id`
-- `run_type`
-- `strategy_label`
-- `notes`
-- `playtime_minutes_since_last_snapshot`
-
-Zusätzliche Ereignisse landen normalisiert in `snapshot_tags.csv`.
-
-## Kontinuierlich an dieselben Dateien anhängen
-
-Ja. Der Workflow schreibt pro Account immer in denselben Verlaufspfad, also zum
-Beispiel:
-
-- `exports/study/A_speed/`
-- `exports/study/B_skills/`
-- `exports/study/C_balanced/`
-
-Neue Snapshots werden an denselben CSV-Satz angehängt. Alte Exporte mit
-abweichendem Schema werden bewusst blockiert, damit keine stillen Join-Probleme
-entstehen.
-
-## Dry-Run / Vorschau
-
-Mit `--dry-run` wird ein Export komplett gebaut und validiert, aber nichts auf
-die Platte geschrieben.
-
-Beispiele:
+## Dry-Run
 
 ```bash
-python -m idleon_reader study session-start --account A_speed --dry-run --tag baseline
-python -m idleon_reader study checkpoint --dry-run --playtime-minutes 20
+python -m idleon_reader --csv exports/latest --dry-run
+python -m idleon_reader study session-start --dry-run
 ```
 
-## Wann die rohe Export-CLI sinnvoll ist
-
-Der ursprüngliche CSV-Export bleibt für Sonderfälle nützlich, zum Beispiel wenn
-ihr bewusst außerhalb des Studien-Workflows arbeiten wollt.
-
-### macOS / Linux
-
-```bash
-bash scripts/export_tracker.sh exports/latest
-```
-
-### Windows
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\latest
-```
-
-Oder direkt:
-
-```bash
-python -m idleon_reader --csv exports/latest --account-label A_speed --run-type checkpoint
-```
-
-## CLI-Output anzeigen
-
-Wenn du nur den sichtbaren Extractor-Output sehen willst:
+## Nur CLI-Output anzeigen
 
 ```bash
 bash scripts/show_extractor_output.sh
 ```
-
-Optional mit Logdatei:
-
-```bash
-bash scripts/show_extractor_output.sh extractor-output.log
-```
-
-## Hinweise
-
-- Das Tool liest nur Daten.
-- IdleOn wird nicht gepatcht oder verändert.
-- Es wird keine Analyse- oder Plot-Logik mitexportiert, nur Daten.
-
-## Lizenz
-
-MIT

@@ -33,7 +33,9 @@ class StudyConfig:
     allowed_tags: tuple[str, ...]
     allowed_milestone_tags: tuple[str, ...]
     allowed_run_types: tuple[str, ...]
-    default_account: str
+    default_profile: str
+    default_save_path: str
+    default_save_account: str
     accounts: dict[str, StudyAccountProfile]
     profiles_path: Path
     local_path: Path
@@ -93,39 +95,41 @@ allowed_milestone_tags = [
 ]
 allowed_run_types = ["baseline", "checkpoint", "session_end", "milestone"]
 
-[accounts.A_speed]
-account_label = "A_speed"
+[accounts.speed_run]
+account_label = "speed_run"
 strategy_label = "speed"
-export_subdir = "A_speed"
+export_subdir = "speed_run"
 
-[accounts.B_skills]
-account_label = "B_skills"
+[accounts.skill_focus]
+account_label = "skill_focus"
 strategy_label = "skills"
-export_subdir = "B_skills"
+export_subdir = "skill_focus"
 
-[accounts.C_balanced]
-account_label = "C_balanced"
+[accounts.balanced_run]
+account_label = "balanced_run"
 strategy_label = "balanced"
-export_subdir = "C_balanced"
+export_subdir = "balanced_run"
 """
 
 
 def local_template() -> str:
     return """[local]
-# Optional default account on this machine
-default_account = "A_speed"
-
-[accounts.A_speed]
+# Optional default study profile:
+# profile = "speed_run"
+#
+# Optional local save path:
 # save_path = "/absolute/path/to/leveldb"
-# save_account = "mySave"
-
-[accounts.B_skills]
+#
+# Optional logical account inside that save:
+# 1. Run: python -m idleon_reader --list-save-accounts
+# 2. Copy the selector from the first column
+# save_selector = "mySave"
+#
+# Advanced:
+# You can still add per-profile overrides if one machine needs different values:
+# [accounts.speed_run]
 # save_path = "/absolute/path/to/leveldb"
-# save_account = "mySave"
-
-[accounts.C_balanced]
-# save_path = "/absolute/path/to/leveldb"
-# save_account = "mySave"
+# save_selector = "mySave"
 """
 
 
@@ -204,7 +208,9 @@ def load_study_config(repo_root: Optional[Path] = None) -> StudyConfig:
         save_account = ""
         if isinstance(local_profile, dict):
             save_path = str(local_profile.get("save_path", "")).strip()
-            save_account = str(local_profile.get("save_account", "")).strip()
+            save_account = str(
+                local_profile.get("save_selector", "") or local_profile.get("save_account", "")
+            ).strip()
         accounts[profile_name] = StudyAccountProfile(
             account_label=account_label,
             strategy_label=strategy_label,
@@ -213,9 +219,18 @@ def load_study_config(repo_root: Optional[Path] = None) -> StudyConfig:
             save_account=save_account,
         )
 
-    default_account = str(local_defaults.get("default_account", "")).strip()
-    if default_account and default_account not in accounts:
-        raise StudyConfigError(f"default_account '{default_account}' ist nicht in study_profiles.toml definiert.")
+    default_profile = str(
+        local_defaults.get("profile", "")
+        or local_defaults.get("default_profile", "")
+        or local_defaults.get("default_account", "")
+    ).strip()
+    default_save_path = str(local_defaults.get("save_path", "")).strip()
+    default_save_account = str(
+        local_defaults.get("save_selector", "") or local_defaults.get("save_account", "")
+    ).strip()
+
+    if default_profile and default_profile not in accounts:
+        raise StudyConfigError(f"Profil '{default_profile}' ist nicht in study_profiles.toml definiert.")
 
     return StudyConfig(
         repo_root=root,
@@ -224,7 +239,9 @@ def load_study_config(repo_root: Optional[Path] = None) -> StudyConfig:
         allowed_tags=allowed_tags,
         allowed_milestone_tags=allowed_milestone_tags,
         allowed_run_types=allowed_run_types,
-        default_account=default_account,
+        default_profile=default_profile,
+        default_save_path=default_save_path,
+        default_save_account=default_save_account,
         accounts=accounts,
         profiles_path=profiles_path,
         local_path=local_path,

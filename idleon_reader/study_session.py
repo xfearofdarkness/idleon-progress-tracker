@@ -81,8 +81,8 @@ def export_dir_for_account(config: StudyConfig, account: StudyAccountProfile, ov
     return root / account.export_subdir
 
 
-def save_path_for_account(account: StudyAccountProfile, override: str = "") -> Path:
-    selected = override or account.save_path
+def save_path_for_account(config: StudyConfig, account: StudyAccountProfile, override: str = "") -> Path:
+    selected = override or account.save_path or config.default_save_path
     if selected:
         return Path(selected).expanduser()
     detected = find_save_directory()
@@ -93,8 +93,8 @@ def save_path_for_account(account: StudyAccountProfile, override: str = "") -> P
     return detected
 
 
-def save_account_for_account(account: StudyAccountProfile, override: str = "") -> str:
-    return (override or account.save_account).strip()
+def save_account_for_account(config: StudyConfig, account: StudyAccountProfile, override: str = "") -> str:
+    return (override or account.save_account or config.default_save_account).strip()
 
 
 def _read_session_ids(snapshots_csv: Path) -> list[str]:
@@ -192,8 +192,8 @@ def baseline_export(
 ) -> ExportResult:
     account = resolve_account(config, account_name)
     chosen_tags = validate_tags(config, tags or [])
-    save_path = save_path_for_account(account, save_path_override)
-    save_account = save_account_for_account(account, save_account_override)
+    save_path = save_path_for_account(config, account, save_path_override)
+    save_account = save_account_for_account(config, account, save_account_override)
     output_dir = export_dir_for_account(config, account, output_dir_override)
     metadata = {
         "account_label": account.account_label,
@@ -234,8 +234,8 @@ def session_start(
 
     account = resolve_account(config, account_name)
     extra_tags = validate_tags(config, tags or [])
-    save_path = save_path_for_account(account, save_path_override)
-    save_account = save_account_for_account(account, save_account_override)
+    save_path = save_path_for_account(config, account, save_path_override)
+    save_account = save_account_for_account(config, account, save_account_override)
     output_dir = export_dir_for_account(config, account, output_dir_override)
     session_id = next_session_id(account.account_label, output_dir, now=now)
     metadata = {
@@ -389,7 +389,7 @@ def session_end(
 def study_status(config: StudyConfig) -> StudyStatus:
     state = load_session_state(config.repo_root)
     if state is None:
-        next_step = "Keine aktive Session. Nutze 'python -m idleon_reader study session-start --account A_speed'."
+        next_step = "Keine aktive Session. Nutze 'python -m idleon_reader study session-start --account <profilname>'."
         return StudyStatus(active=False, state=None, next_step=next_step)
 
     manifest_dir = Path(state.export_dir) / "run_manifests"
@@ -408,8 +408,8 @@ def study_status(config: StudyConfig) -> StudyStatus:
 
 
 def default_account_name(config: StudyConfig) -> str:
-    if config.default_account:
-        return config.default_account
+    if config.default_profile:
+        return config.default_profile
     if len(config.accounts) == 1:
         return next(iter(config.accounts))
-    raise StudyConfigError("Kein default_account gesetzt. Bitte --account angeben oder study_local.toml fuellen.")
+    raise StudyConfigError("Kein Profil gesetzt. Bitte --account angeben oder study_local.toml fuellen.")

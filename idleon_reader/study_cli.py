@@ -10,6 +10,7 @@ from .study_session import (
     StudySessionError,
     baseline_export,
     checkpoint_export,
+    default_account_name,
     milestone_export,
     session_end,
     session_start,
@@ -31,12 +32,12 @@ def create_study_parser() -> argparse.ArgumentParser:
     status_parser.set_defaults(handler=cmd_status)
 
     baseline_parser = subparsers.add_parser("baseline", help="Schreibe einen Baseline-Snapshot fuer einen Studienaccount.")
-    baseline_parser.add_argument("--account", required=True, help="Account-Profil aus study_profiles.toml.")
+    baseline_parser.add_argument("--account", default="", help="Profilname aus study_profiles.toml.")
     _add_shared_export_arguments(baseline_parser, allow_playtime=False)
     baseline_parser.set_defaults(handler=cmd_baseline)
 
     session_start_parser = subparsers.add_parser("session-start", help="Starte eine Session und schreibe den ersten Snapshot.")
-    session_start_parser.add_argument("--account", required=True, help="Account-Profil aus study_profiles.toml.")
+    session_start_parser.add_argument("--account", default="", help="Profilname aus study_profiles.toml.")
     _add_shared_export_arguments(session_start_parser, allow_playtime=False)
     session_start_parser.set_defaults(handler=cmd_session_start)
 
@@ -180,9 +181,10 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 def cmd_baseline(args: argparse.Namespace) -> int:
     config = load_study_config()
+    account_name = args.account or default_account_name(config)
     result = baseline_export(
         config,
-        account_name=args.account,
+        account_name=account_name,
         notes=args.notes,
         tags=args.tag,
         save_path_override=args.save_path,
@@ -199,9 +201,10 @@ def cmd_baseline(args: argparse.Namespace) -> int:
 
 def cmd_session_start(args: argparse.Namespace) -> int:
     config = load_study_config()
+    account_name = args.account or default_account_name(config)
     result, state = session_start(
         config,
-        account_name=args.account,
+        account_name=account_name,
         notes=args.notes,
         tags=args.tag,
         save_path_override=args.save_path,

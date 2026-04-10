@@ -22,17 +22,17 @@ allowed_milestone_tags = [
 ]
 allowed_run_types = ["baseline", "checkpoint", "session_end", "milestone"]
 
-[accounts.A_speed]
-account_label = "A_speed"
+[accounts.speed_run]
+account_label = "speed_run"
 strategy_label = "speed"
-export_subdir = "A_speed"
+export_subdir = "speed_run"
 
-[accounts.B_skills]
-account_label = "B_skills"
+[accounts.skill_focus]
+account_label = "skill_focus"
 strategy_label = "skills"
-export_subdir = "B_skills"
+export_subdir = "skill_focus"
 
-[accounts.C_balanced]
-account_label = "C_balanced"
+[accounts.balanced_run]
+account_label = "balanced_run"
 strategy_label = "balanced"
-export_subdir = "C_balanced"
+export_subdir = "balanced_run"
