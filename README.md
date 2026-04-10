@@ -66,8 +66,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 ex
 ## Studien-Metadaten beim Export
 
 Die Export-Skripte reichen zusätzliche CLI-Flags direkt an `python -m idleon_reader`
-weiter. Damit könnt ihr jeden Snapshot sauber für die spätere Analyse
-annotieren.
+weiter. Zusätzliche Metadaten landen direkt im Snapshot-Export.
 
 Beispiel macOS / Linux:
 
@@ -127,7 +126,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 ex
 
 ## Kontinuierlich an dieselben Dateien anhängen
 
-Ja. Das Tool kann neue Snapshots an denselben Satz CSV-Dateien anhängen.
+Neue Snapshots werden an denselben Satz CSV-Dateien im Zielordner angehängt.
 
 Wichtig:
 
@@ -167,7 +166,7 @@ Ein Export erzeugt:
 
 ## CLI-Output anzeigen
 
-Wenn du nur den sichtbaren Extractor-Output sehen willst:
+Nur den sichtbaren Extractor-Output anzeigen:
 
 ```bash
 bash scripts/show_extractor_output.sh
