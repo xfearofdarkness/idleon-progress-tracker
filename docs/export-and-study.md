@@ -1,5 +1,19 @@
 # Export und Study-Workflow
 
+Die Befehle auf dieser Seite setzen eine aktivierte Projekt-`venv` voraus.
+
+macOS / Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+Windows:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
 ## Standard-Export
 
 CSV-Export:

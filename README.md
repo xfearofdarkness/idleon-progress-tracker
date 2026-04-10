@@ -20,6 +20,16 @@ cd idleon-progress-tracker
 powershell -ExecutionPolicy Bypass -File .\scripts\install_tracker_windows.ps1
 ```
 
+Für `python -m idleon_reader ...` muss die Projekt-`venv` aktiv sein:
+
+```bash
+source .venv/bin/activate
+```
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
 ## Schneller Export
 
 Standard-Export:
