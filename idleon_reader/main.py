@@ -10,8 +10,7 @@ Usage:
     python -m idleon_reader --path /path/to/db # Specify LevelDB path
     python -m idleon_reader --json             # Export raw data as JSON
     python -m idleon_reader --json --output save_data.json
-    python -m idleon_reader --list-save-accounts
-    python -m idleon_reader --save-account mySave --csv exports/latest
+    python -m idleon_reader --csv exports/a --account-label speed_run --tag baseline
 """
 
 import argparse
@@ -54,10 +53,8 @@ def create_parser() -> argparse.ArgumentParser:
             "  python -m idleon_reader --path ~/mein-backup  Pfad angeben\n"
             "  python -m idleon_reader --json -o daten.json  JSON-Export\n"
             "  python -m idleon_reader --info                Speicherort-Info\n"
-            "  python -m idleon_reader --list-save-accounts  Save-Accounts anzeigen\n"
-            "  python -m idleon_reader --save-account mySave --csv exports/latest\n"
-            "  python -m idleon_reader --csv exports/latest --account-label speed_run --tag baseline\n"
-            "  python -m idleon_reader --csv exports/latest --dry-run --session-id s01\n"
+            "  python -m idleon_reader --csv exports/a --account-label speed_run --tag baseline\n"
+            "  python -m idleon_reader --csv exports/a --dry-run --session-id s01\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -428,9 +425,16 @@ def _print_export_summary(result):
             print(f"    - {warning}")
 
 
-def main():
+def main(argv: Optional[list[str]] = None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+
+    if argv and argv[0] == "study":
+        from .study_cli import run_study_cli
+
+        sys.exit(run_study_cli(argv[1:]))
+
     parser = create_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.info:
         cmd_info()

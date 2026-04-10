@@ -12,6 +12,9 @@ requires-python = ">=3.10"
 authors = [
     { name = "IdleOn Progress Tracker" },
 ]
+dependencies = [
+    "tomli>=2.0.0; python_version < '3.11'",
+]
 
 keywords = ["idleon", "legends-of-idleon", "lavaflame2", "save-reader", "progress-tracker"]
 classifiers = [
