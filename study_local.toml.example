@@ -1,0 +1,11 @@
+[local]
+# Optional default profile for study commands without --account
+# profile = "account_1"
+
+# Optional if auto-detection is not enough
+# save_path = "/absolute/path/to/leveldb"
+
+# Optional if one LevelDB save contains several logical accounts
+# 1. Run: python -m idleon_reader --list-save-accounts
+# 2. Copy the selector from the first column
+# save_selector = "mySave"

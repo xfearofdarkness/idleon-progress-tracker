@@ -1,0 +1,38 @@
+[study]
+default_export_root = "exports/study"
+default_study_group = "main"
+allowed_tags = [
+  "baseline",
+  "session_start",
+  "session_end",
+  "reached_level_5",
+  "reached_level_10",
+  "reached_level_20",
+  "class_advance",
+  "quest_milestone",
+  "boss_unlock",
+]
+allowed_milestone_tags = [
+  "reached_level_5",
+  "reached_level_10",
+  "reached_level_20",
+  "class_advance",
+  "quest_milestone",
+  "boss_unlock",
+]
+allowed_run_types = ["baseline", "checkpoint", "session_end", "milestone"]
+
+[accounts.account_1]
+account_label = "account_1"
+strategy_label = "custom"
+export_subdir = "account_1"
+
+[accounts.account_2]
+account_label = "account_2"
+strategy_label = "custom"
+export_subdir = "account_2"
+
+[accounts.account_3]
+account_label = "account_3"
+strategy_label = "custom"
+export_subdir = "account_3"
