@@ -1,11 +1,10 @@
 # IdleOn Progress Tracker
 
-Liest lokale Save-Daten aus **Legends of Idleon** und exportiert sie als
-saubere CSV-Datensätze für ein Data-Science-Projekt.
+Liest lokale IdleOn-Saves und exportiert saubere CSV-Datensätze für die Auswertung.
 
 ## Installation
 
-### macOS / Linux
+macOS / Linux:
 
 ```bash
 git clone https://github.com/xfearofdarkness/idleon-progress-tracker.git
@@ -13,7 +12,7 @@ cd idleon-progress-tracker
 bash scripts/install_tracker.sh
 ```
 
-### Windows
+Windows:
 
 ```powershell
 git clone https://github.com/xfearofdarkness/idleon-progress-tracker.git
@@ -21,7 +20,13 @@ cd idleon-progress-tracker
 powershell -ExecutionPolicy Bypass -File .\scripts\install_tracker_windows.ps1
 ```
 
-## Daten extrahieren
+## Schneller Export
+
+Standard-Export:
+
+```bash
+python -m idleon_reader --csv exports/latest
+```
 
 Wenn ein Save mehrere logische Accounts enthält:
 
@@ -30,121 +35,39 @@ python -m idleon_reader --list-save-accounts
 python -m idleon_reader --save-account mySave --csv exports/latest
 ```
 
-### macOS / Linux
+## Study-Workflow
 
-Standard-Export:
-
-```bash
-bash scripts/export_tracker.sh
-```
-
-Bestimmten Zielordner verwenden:
+`study init-config` legt die lokalen Konfigurationsdateien an:
 
 ```bash
-bash scripts/export_tracker.sh exports/latest
+python -m idleon_reader study init-config
 ```
 
-### Windows
+Minimales lokales Beispiel:
 
-Standard-Export:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1
+```toml
+[local]
+profile = "account_1"
+save_path = "/absolute/path/to/leveldb"
+save_selector = "mySave"
 ```
 
-Bestimmten Zielordner verwenden:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\latest
-```
-
-## Studien-Metadaten beim Export
-
-Die Export-Skripte reichen zusätzliche CLI-Flags direkt an `python -m idleon_reader`
-weiter. Zusätzliche Metadaten landen direkt im Snapshot-Export.
-
-Beispiel macOS / Linux:
+Danach funktionieren die einfachen Study-Kommandos ohne lange Flag-Ketten:
 
 ```bash
-bash scripts/export_tracker.sh exports/study_a \
-  --account-label speed_run \
-  --study-group pilot \
-  --session-id s01 \
-  --run-type baseline \
-  --strategy-label speed \
-  --playtime-minutes 15 \
-  --tag session_start \
-  --tag baseline
+python -m idleon_reader study baseline --tag baseline
+python -m idleon_reader study session-start
+python -m idleon_reader study checkpoint --playtime-minutes 30
+python -m idleon_reader study session-end --playtime-minutes 60
 ```
 
-Beispiel Windows:
+## Weiterführende Doku
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\study_a `
-  --account-label speed_run `
-  --study-group pilot `
-  --session-id s01 `
-  --run-type baseline `
-  --strategy-label speed `
-  --playtime-minutes 15 `
-  --tag session_start `
-  --tag baseline
-```
+- [Export und CLI-Flags](./docs/export-and-study.md)
 
-Verfügbare Zusatzflags:
+## Output
 
-- `--account-label`
-- `--study-group`
-- `--session-id`
-- `--run-type manual|baseline|checkpoint|session_end|milestone`
-- `--strategy-label`
-- `--notes`
-- `--playtime-minutes`
-- `--tag` mehrfach wiederholbar
-
-## Dry-Run / Vorschau
-
-Mit `--dry-run` wird der Export komplett gebaut und validiert, aber nichts auf
-die Platte geschrieben.
-
-macOS / Linux:
-
-```bash
-bash scripts/export_tracker.sh exports/preview --dry-run --account-label speed_run
-```
-
-Windows:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\preview --dry-run --account-label speed_run
-```
-
-## Kontinuierlich an dieselben Dateien anhängen
-
-Neue Snapshots werden an denselben Satz CSV-Dateien im Zielordner angehängt.
-
-Wichtig:
-
-- es wird nicht an eine einzige Datei angehängt
-- stattdessen werden dieselben Tabellen im Zielordner erweitert
-- verbunden werden die Datensätze über `snapshot_id`
-- Append auf alte Exporte mit abweichendem Schema wird bewusst blockiert
-
-macOS / Linux:
-
-```bash
-bash scripts/export_tracker.sh exports/history --append --session-id s02 --tag session_end
-```
-
-Windows:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\history --append --session-id s02 --tag session_end
-```
-
-## Exportierte Dateien
-
-Ein Export erzeugt:
+Ein Export schreibt unter anderem:
 
 - `snapshots.csv`
 - `snapshot_tags.csv`
@@ -159,26 +82,8 @@ Ein Export erzeugt:
 - `data_dictionary.csv`
 - `run_manifests/<snapshot_id>.json`
 
-## CLI-Output anzeigen
-
-Nur den sichtbaren Extractor-Output anzeigen:
+## Nur CLI-Output anzeigen
 
 ```bash
 bash scripts/show_extractor_output.sh
 ```
-
-Optional mit Logdatei:
-
-```bash
-bash scripts/show_extractor_output.sh extractor-output.log
-```
-
-## Hinweise
-
-- Das Tool liest nur Daten.
-- IdleOn wird nicht gepatcht oder verändert.
-- Es wird keine Analyse- oder Plot-Logik mitexportiert, nur Daten.
-
-## Lizenz
-
-MIT
