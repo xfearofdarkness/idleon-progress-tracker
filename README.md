@@ -19,13 +19,16 @@ git clone https://github.com/xfearofdarkness/idleon-progress-tracker.git
 cd idleon-progress-tracker
 powershell -ExecutionPolicy Bypass -File .\scripts\install_tracker_windows.ps1
 ```
+## Hinweis
 
-Für `python -m idleon_reader ...` muss die Projekt-`venv` aktiv sein:
+Für nachfolgende Commands mit `python -m idleon_reader ...` muss die Projekt-`venv` aktiv sein:
 
+macOS / Linux:
 ```bash
 source .venv/bin/activate
 ```
 
+Windows
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
