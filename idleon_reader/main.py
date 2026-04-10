@@ -10,7 +10,8 @@ Usage:
     python -m idleon_reader --path /path/to/db # Specify LevelDB path
     python -m idleon_reader --json             # Export raw data as JSON
     python -m idleon_reader --json --output save_data.json
-    python -m idleon_reader --csv exports/a --account-label A_speed --tag baseline
+    python -m idleon_reader --list-save-accounts
+    python -m idleon_reader --save-account mySave --csv exports/latest
 """
 
 import argparse
@@ -53,8 +54,10 @@ def create_parser() -> argparse.ArgumentParser:
             "  python -m idleon_reader --path ~/mein-backup  Pfad angeben\n"
             "  python -m idleon_reader --json -o daten.json  JSON-Export\n"
             "  python -m idleon_reader --info                Speicherort-Info\n"
-            "  python -m idleon_reader --csv exports/a --account-label A_speed --tag baseline\n"
-            "  python -m idleon_reader --csv exports/a --dry-run --session-id s01\n"
+            "  python -m idleon_reader --list-save-accounts  Save-Accounts anzeigen\n"
+            "  python -m idleon_reader --save-account mySave --csv exports/latest\n"
+            "  python -m idleon_reader --csv exports/latest --account-label speed_run --tag baseline\n"
+            "  python -m idleon_reader --csv exports/latest --dry-run --session-id s01\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

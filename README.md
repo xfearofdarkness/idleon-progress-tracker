@@ -28,6 +28,13 @@ Hinweis für Windows:
 
 ## Daten extrahieren
 
+Wenn ein Save mehrere logische Accounts enthält:
+
+```bash
+python -m idleon_reader --list-save-accounts
+python -m idleon_reader --save-account mySave --csv exports/latest
+```
+
 ### macOS / Linux
 
 Standard-Export:
@@ -66,7 +73,7 @@ Beispiel macOS / Linux:
 
 ```bash
 bash scripts/export_tracker.sh exports/study_a \
-  --account-label A_speed \
+  --account-label speed_run \
   --study-group pilot \
   --session-id s01 \
   --run-type baseline \
@@ -80,7 +87,7 @@ Beispiel Windows:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\study_a `
-  --account-label A_speed `
+  --account-label speed_run `
   --study-group pilot `
   --session-id s01 `
   --run-type baseline `
@@ -109,13 +116,13 @@ die Platte geschrieben.
 macOS / Linux:
 
 ```bash
-bash scripts/export_tracker.sh exports/preview --dry-run --account-label A_speed
+bash scripts/export_tracker.sh exports/preview --dry-run --account-label speed_run
 ```
 
 Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\preview --dry-run --account-label A_speed
+powershell -ExecutionPolicy Bypass -File .\scripts\export_tracker_windows.ps1 exports\preview --dry-run --account-label speed_run
 ```
 
 ## Kontinuierlich an dieselben Dateien anhängen
