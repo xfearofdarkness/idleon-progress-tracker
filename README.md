@@ -21,11 +21,6 @@ cd idleon-progress-tracker
 powershell -ExecutionPolicy Bypass -File .\scripts\install_tracker_windows.ps1
 ```
 
-Hinweis für Windows:
-
-- `tools/leveldbutil.exe` liegt bereits im Repo
-- dadurch muss auf Windows niemand `leveldb` selbst bauen
-
 ## Daten extrahieren
 
 Wenn ein Save mehrere logische Accounts enthält:
