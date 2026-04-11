@@ -28,6 +28,7 @@ Thumbs.db
 !tests/fixtures/*.json
 study_local.toml
 .idleon-study/
+restores/
 
 # Logs
 *.log

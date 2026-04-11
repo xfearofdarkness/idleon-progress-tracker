@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import csv
+import json
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -15,6 +17,7 @@ from idleon_reader.study_cli import cmd_init_config
 from idleon_reader.study_session import (
     StudySessionError,
     baseline_export,
+    backup_now,
     checkpoint_export,
     clear_session_state,
     load_session_state,
@@ -117,8 +120,9 @@ def _sample_multi_save_data():
     }
 
 
-def _write_study_files(root: Path, save_path: Path, save_account: str = ""):
+def _write_study_files(root: Path, save_path: Path, save_account: str = "", include_local_config: bool = True):
     save_account_line = f'save_selector = "{save_account}"\n' if save_account else ""
+    backup_root = root.parent / f"{root.name}-backups"
     (root / "study_profiles.toml").write_text(
         """[study]
 default_export_root = "exports/study"
@@ -143,16 +147,24 @@ export_subdir = "skill_focus"
         f"""[local]
 profile = "speed_run"
 save_path = "{save_path.as_posix()}"
-{save_account_line}""",
+{save_account_line}
+[backup]
+root = "{backup_root.as_posix()}"
+include_local_config = {"true" if include_local_config else "false"}
+""",
         encoding="utf-8",
     )
 
 
 def _write_advanced_local_file(root: Path, save_path: Path, save_account: str = ""):
     save_account_line = f'save_selector = "{save_account}"\n' if save_account else ""
+    backup_root = root.parent / f"{root.name}-backups"
     (root / "study_local.toml").write_text(
         f"""[local]
 profile = "speed_run"
+
+[backup]
+root = "{backup_root.as_posix()}"
 
 [accounts.speed_run]
 save_path = "{save_path.as_posix()}"
@@ -170,6 +182,7 @@ def test_load_study_config_and_examples(tmp_path):
     assert config.default_profile == "speed_run"
     assert config.default_save_path == fake_save.as_posix()
     assert config.default_save_account == "save_a"
+    assert config.include_local_config_in_backup is True
     assert config.accounts["speed_run"].save_path == ""
     assert config.accounts["speed_run"].save_account == ""
 
@@ -229,8 +242,27 @@ def test_baseline_export_writes_without_session_state(tmp_path, monkeypatch):
 
     result = baseline_export(config, account_name="speed_run", tags=["baseline"], notes="baseline run")
     assert result.study_metadata["run_type"] == "baseline"
+    assert result.backup["success"] is True
     assert load_session_state(tmp_path) is None
     assert (tmp_path / "exports" / "study" / "speed_run" / "snapshots.csv").exists()
+
+
+def test_baseline_export_defaults_to_append_on_existing_history(tmp_path, monkeypatch):
+    fake_save = tmp_path / "fake-save"
+    fake_save.mkdir()
+    _write_study_files(tmp_path, fake_save)
+    config = load_study_config(tmp_path)
+
+    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_save_data())
+
+    baseline_export(config, account_name="speed_run", tags=["baseline"], notes="first")
+    result = baseline_export(config, account_name="speed_run", tags=["baseline"], notes="second")
+
+    assert result.mode == "append"
+
+    with open(tmp_path / "exports" / "study" / "speed_run" / "snapshots.csv", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 2
 
 
 def test_session_start_checkpoint_and_end_manage_state(tmp_path, monkeypatch):
@@ -248,6 +280,7 @@ def test_session_start_checkpoint_and_end_manage_state(tmp_path, monkeypatch):
         now=datetime(2026, 4, 9, 9, 0, 0),
     )
     assert start_result.study_metadata["session_id"] == "speed_run-20260409-s01"
+    assert start_result.backup["success"] is True
     assert load_session_state(tmp_path).session_id == start_state.session_id
 
     checkpoint_result, checkpoint_state = checkpoint_export(
@@ -257,6 +290,7 @@ def test_session_start_checkpoint_and_end_manage_state(tmp_path, monkeypatch):
         tags=[],
     )
     assert checkpoint_result.append is True
+    assert checkpoint_result.backup["success"] is True
     assert checkpoint_result.study_metadata["session_id"] == start_state.session_id
     assert checkpoint_state.last_snapshot_id == checkpoint_result.snapshot_id
 
@@ -267,6 +301,7 @@ def test_session_start_checkpoint_and_end_manage_state(tmp_path, monkeypatch):
         tags=[],
     )
     assert end_result.study_metadata["run_type"] == "session_end"
+    assert end_result.backup["success"] is True
     assert end_state.session_id == start_state.session_id
     assert load_session_state(tmp_path) is None
 
@@ -381,3 +416,22 @@ def test_load_study_config_still_supports_profile_specific_overrides(tmp_path):
     assert config.default_save_account == ""
     assert config.accounts["speed_run"].save_path == fake_save.as_posix()
     assert config.accounts["speed_run"].save_account == "save_b"
+
+
+def test_backup_now_can_skip_local_config(tmp_path, monkeypatch):
+    fake_save = tmp_path / "fake-save"
+    fake_save.mkdir()
+    _write_study_files(tmp_path, fake_save)
+    config = load_study_config(tmp_path)
+
+    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_save_data())
+
+    baseline_export(config, account_name="speed_run", tags=["baseline"])
+    record = backup_now(config, account_name="speed_run", include_local_config=False)
+
+    with zipfile.ZipFile(record.archive_path, "r") as archive:
+        names = set(archive.namelist())
+        manifest = json.loads(archive.read("backup_manifest.json").decode("utf-8"))
+
+    assert "config/study_local.toml" not in names
+    assert manifest["include_local_config"] is False

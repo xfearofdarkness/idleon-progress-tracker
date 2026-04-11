@@ -231,6 +231,42 @@ def test_append_mode(sample_save_data, tmp_path):
     assert manifest["mode"] == "append"
 
 
+def test_second_export_defaults_to_append(sample_save_data, tmp_path):
+    export_tidy_csvs(sample_save_data, tmp_path, source_path="a", timestamp="2026-01-01T00:00:00Z")
+    result = export_tidy_csvs(sample_save_data, tmp_path, source_path="a", timestamp="2026-01-02T00:00:00Z")
+
+    with open(tmp_path / "snapshots.csv", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert len(rows) == 2
+    assert result.append is True
+    assert result.mode == "append"
+
+
+def test_overwrite_replaces_existing_export(sample_save_data, tmp_path):
+    first = export_tidy_csvs(sample_save_data, tmp_path, source_path="a", timestamp="2026-01-01T00:00:00Z")
+    result = export_tidy_csvs(
+        sample_save_data,
+        tmp_path,
+        source_path="a",
+        timestamp="2026-01-02T00:00:00Z",
+        overwrite=True,
+    )
+
+    with open(tmp_path / "snapshots.csv", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+
+    manifest_dir = tmp_path / "run_manifests"
+    manifests = sorted(path.name for path in manifest_dir.glob("*.json"))
+
+    assert len(rows) == 1
+    assert rows[0]["timestamp"] == "2026-01-02T00:00:00Z"
+    assert result.append is False
+    assert result.mode == "overwrite"
+    assert manifests == [f"{result.snapshot_id}.json"]
+    assert first.snapshot_id != result.snapshot_id
+
+
 def test_dry_run_writes_nothing(sample_save_data, tmp_path):
     result = export_tidy_csvs(
         sample_save_data,
@@ -292,3 +328,15 @@ def test_manifest_row_counts_match_written_rows(sample_save_data, tmp_path):
         characters_rows = list(csv.DictReader(handle))
 
     assert manifest["table_row_counts"]["characters"] == len(characters_rows)
+
+
+def test_append_and_overwrite_are_mutually_exclusive(sample_save_data, tmp_path):
+    with pytest.raises(ValueError):
+        export_tidy_csvs(
+            sample_save_data,
+            tmp_path,
+            source_path="a",
+            timestamp="2026-01-01T00:00:00Z",
+            append=True,
+            overwrite=True,
+        )
