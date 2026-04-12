@@ -5,6 +5,7 @@ import pytest
 from idleon_reader.save_accounts import (
     SaveAccountSelectionError,
     discover_save_accounts,
+    format_save_account_candidates,
     select_save_account,
 )
 
@@ -50,3 +51,21 @@ def test_select_save_account_by_selector_wraps_selected_save():
 def test_select_save_account_requires_choice_when_multiple_candidates_exist():
     with pytest.raises(SaveAccountSelectionError):
         select_save_account(_multi_account_data(), allow_prompt=False)
+
+
+def test_format_candidates_marks_incomplete_save():
+    candidates = discover_save_accounts(
+        {
+            "mySave": {
+                "Money": 1,
+                "GemsOwned": 2,
+                "Cards": {},
+                "PlayerDATABASE": {},
+            }
+        }
+    )
+
+    lines = format_save_account_candidates(candidates)
+
+    assert len(lines) == 1
+    assert "wahrscheinlich unvollständig" in lines[0]

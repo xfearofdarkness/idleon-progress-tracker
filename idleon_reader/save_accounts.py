@@ -17,6 +17,7 @@ class SaveAccountCandidate:
     display_name: str
     character_count: int
     character_names: tuple[str, ...]
+    has_player_database: bool
     data: dict[str, Any]
 
 
@@ -79,11 +80,13 @@ def discover_save_accounts(raw_data: dict[str, Any]) -> list[SaveAccountCandidat
     def visit(value: Any, path: str, depth: int) -> None:
         if _looks_like_save_dict(value):
             names = _character_names_for_save(value)
+            player_db = value.get("PlayerDATABASE")
             found[path] = SaveAccountCandidate(
                 selector=path,
                 display_name=_display_name(path, names),
                 character_count=len(names),
                 character_names=names,
+                has_player_database=isinstance(player_db, dict) and bool(player_db),
                 data=value,
             )
             return
@@ -114,9 +117,12 @@ def format_save_account_candidates(candidates: list[SaveAccountCandidate]) -> li
         names = ", ".join(candidate.character_names[:3]) if candidate.character_names else "keine Charakternamen erkannt"
         if len(candidate.character_names) > 3:
             names += ", ..."
+        suffix = ""
+        if not candidate.has_player_database:
+            suffix = "  [wahrscheinlich unvollständig]"
         lines.append(
             f"    [{index}] {candidate.selector:20s} "
-            f"{candidate.character_count:>2} Charaktere  {names}"
+            f"{candidate.character_count:>2} Charaktere  {names}{suffix}"
         )
     return lines
 
