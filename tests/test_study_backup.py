@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
-from idleon_reader.study_backup import StudyBackupError, list_study_backups, restore_study_backup
+from idleon_reader.study_backup import (
+    StudyBackupError,
+    create_study_backup,
+    list_study_backups,
+    restore_study_backup,
+)
 from idleon_reader.study_config import StudyConfigError, load_study_config
 from idleon_reader.study_session import baseline_export, load_session_state, session_end, session_start
 
@@ -211,3 +218,37 @@ def test_dry_run_does_not_create_backup(tmp_path, monkeypatch):
 
     assert result.backup["attempted"] is False
     assert not backup_root.exists()
+
+
+def test_create_study_backup_closes_mkstemp_fd(tmp_path, monkeypatch):
+    fake_save = tmp_path / "fake-save"
+    fake_save.mkdir()
+    backup_root = tmp_path.parent / f"{tmp_path.name}-backups"
+    _write_study_files(tmp_path, fake_save, backup_root=backup_root)
+    config = load_study_config(tmp_path)
+    export_dir = tmp_path / "exports" / "study" / "speed_run"
+    export_dir.mkdir(parents=True)
+    (export_dir / "snapshots.csv").write_text("snapshot_id,timestamp\nsnap-1,2026-04-12T00:00:00Z\n", encoding="utf-8")
+
+    captured: dict[str, int] = {}
+    real_mkstemp = tempfile.mkstemp
+
+    def tracked_mkstemp(*args, **kwargs):
+        fd, name = real_mkstemp(*args, **kwargs)
+        captured["fd"] = fd
+        return fd, name
+
+    monkeypatch.setattr("idleon_reader.study_backup.tempfile.mkstemp", tracked_mkstemp)
+
+    record = create_study_backup(
+        config=config,
+        account=config.accounts["speed_run"],
+        export_dir=export_dir,
+        snapshot_id="snap-1",
+        run_type="baseline",
+        study_group="main",
+    )
+
+    with pytest.raises(OSError):
+        os.fstat(captured["fd"])
+    assert record.archive_path.exists()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import os
 import platform
 import shutil
 import subprocess
@@ -190,7 +191,7 @@ def create_study_backup(
     )
     archive_path = archive_dir / archive_name
     tmp_fd, tmp_name = tempfile.mkstemp(prefix=".backup-", suffix=".zip", dir=archive_dir)
-    Path(tmp_name).unlink(missing_ok=True)
+    os.close(tmp_fd)
 
     entries = _build_archive_entries(
         config=config,
