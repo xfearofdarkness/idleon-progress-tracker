@@ -261,25 +261,6 @@ def read_with_leveldbutil(db_path: Path) -> dict[str, Any]:
     attempted_files = 0
     failed_files: list[tuple[str, str]] = []
 
-    log_files = sorted(db_path.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
-    for log_file in log_files:
-        attempted_files += 1
-        try:
-            entries = _iter_leveldbutil_entries(log_file)
-        except subprocess.CalledProcessError as exc:
-            failed_files.append((str(log_file.name), str(exc)))
-            continue
-        for action, key_str, value_str in entries:
-            key_name = _normalize_key_name(key_str)
-            if action == "del":
-                result.pop(key_name, None)
-                continue
-            try:
-                key_name, decoded = _decode_entry(key_str, value_str or "")
-                result[key_name] = decoded
-            except (ValueError, SyntaxError):
-                continue
-
     ldb_files = sorted(db_path.glob("*.ldb"), key=lambda p: p.stat().st_mtime, reverse=True)
     for ldb_file in ldb_files:
         attempted_files += 1

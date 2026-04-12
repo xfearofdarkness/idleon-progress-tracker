@@ -34,7 +34,6 @@ def test_read_save_data_falls_back_when_leveldbutil_returns_no_entries(monkeypat
 
 
 def test_read_with_leveldbutil_raises_when_all_file_dumps_fail(tmp_path, monkeypatch):
-    (tmp_path / "000001.log").write_bytes(b"")
     (tmp_path / "000002.ldb").write_bytes(b"")
 
     def fail(_path):
@@ -45,4 +44,15 @@ def test_read_with_leveldbutil_raises_when_all_file_dumps_fail(tmp_path, monkeyp
     with pytest.raises(ldb_reader.subprocess.CalledProcessError) as exc_info:
         ldb_reader.read_with_leveldbutil(tmp_path)
 
-    assert "000001.log" in str(exc_info.value.output) or "000002.ldb" in str(exc_info.value.output)
+    assert "000002.ldb" in str(exc_info.value.output)
+
+
+def test_read_with_leveldbutil_ignores_log_only_directories(tmp_path, monkeypatch):
+    (tmp_path / "000001.log").write_bytes(b"")
+
+    def fail(_path):
+        raise AssertionError("leveldbutil should not be called for .log files")
+
+    monkeypatch.setattr(ldb_reader, "_iter_leveldbutil_entries", fail)
+
+    assert ldb_reader.read_with_leveldbutil(tmp_path) == {}
