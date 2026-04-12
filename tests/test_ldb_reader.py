@@ -56,3 +56,14 @@ def test_read_with_leveldbutil_ignores_log_only_directories(tmp_path, monkeypatc
     monkeypatch.setattr(ldb_reader, "_iter_leveldbutil_entries", fail)
 
     assert ldb_reader.read_with_leveldbutil(tmp_path) == {}
+
+
+def test_read_raw_can_recover_my_save_from_ldb_heuristic(tmp_path):
+    payload = b'prefixmySave\x01{"Money":123,"PlayerDATABASE":{"Alpha":{"CharacterClass":1}}}\x00suffix'
+    (tmp_path / "000003.ldb").write_bytes(payload)
+
+    result = ldb_reader.read_raw(tmp_path)
+
+    assert "mySave" in result
+    assert result["mySave"]["Money"] == 123
+    assert "Alpha" in result["mySave"]["PlayerDATABASE"]

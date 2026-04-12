@@ -152,6 +152,51 @@ def _read_varint(data: bytes, pos: int) -> tuple[Optional[int], int]:
     return None, pos
 
 
+def _read_ldb_file(filepath: Path) -> list[tuple[bytes, bytes]]:
+    """
+    Best-effort reader for .ldb SSTables.
+
+    This does not implement the full table format. It scans the raw bytes for
+    known IdleOn save-key markers and then extracts the following text-ish blob.
+    It is intentionally heuristic, but it is still useful when the save has
+    already been compacted into .ldb files and no longer exists in recent .log
+    write batches.
+    """
+    pairs = []
+    try:
+        data = filepath.read_bytes()
+    except (OSError, IOError):
+        return pairs
+
+    for marker in (b"mySave",):
+        search_pos = 0
+        while True:
+            idx = data.find(marker, search_pos)
+            if idx == -1:
+                break
+
+            value_start = idx + len(marker)
+            while value_start < len(data) and data[value_start] in (0x00, 0x01, 0x02):
+                value_start += 1
+
+            value_end = value_start
+            while value_end < len(data):
+                byte = data[value_end]
+                if byte == 0x00 or byte < 0x09:
+                    break
+                value_end += 1
+                if value_end - value_start > 10_000_000:
+                    break
+
+            value = data[value_start:value_end]
+            if value:
+                pairs.append((marker, value))
+
+            search_pos = idx + 1
+
+    return pairs
+
+
 def _find_leveldbutil() -> Optional[str]:
     """Find the leveldbutil executable if it is installed."""
     env_override = Path(
@@ -299,9 +344,8 @@ def read_raw(db_path: Path) -> dict[str, Any]:
     """
     Read IdleOn save data using raw LevelDB log parsing.
 
-    This last-resort fallback only parses `.log` write batches. It avoids
-    attempting to scrape `.ldb` SSTables heuristically because that produced
-    ambiguous and misleading data.
+    This fallback parses `.log` write batches first and then applies a very
+    conservative `.ldb` heuristic reader for compacted saves.
 
     Args:
         db_path: Path to the LevelDB directory.
@@ -334,6 +378,21 @@ def read_raw(db_path: Path) -> dict[str, Any]:
 
                 except (UnicodeDecodeError, ValueError):
                     continue
+
+    # Parse .ldb files (SSTables) with a heuristic scanner.
+    ldb_files = sorted(db_path.glob("*.ldb"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for ldb_file in ldb_files:
+        pairs = _read_ldb_file(ldb_file)
+        for key_bytes, value_bytes in pairs:
+            try:
+                key_str = key_bytes.decode("utf-8", errors="replace") if isinstance(key_bytes, bytes) else str(key_bytes)
+                value_str = value_bytes.decode("utf-8", errors="replace") if isinstance(value_bytes, bytes) else str(value_bytes)
+                if value_str.startswith("\x01"):
+                    value_str = value_str[1:]
+                if key_str not in result:
+                    result[key_str] = try_decode_value(value_str)
+            except (UnicodeDecodeError, ValueError):
+                continue
 
     return result
 
