@@ -100,9 +100,14 @@ Danach funktionieren die einfachen Study-Kommandos ohne lange Flag-Ketten:
 ```bash
 python -m idleon_reader study baseline --tag baseline
 python -m idleon_reader study session-start
-python -m idleon_reader study checkpoint --playtime-minutes 30
 python -m idleon_reader study session-end --playtime-minutes 60
 ```
+
+Wichtig:
+
+- `baseline` und `session-end` sind die belastbaren Save-Snapshots.
+- `session-start` legt nur den Studienkontext an und schreibt keinen Save-Export.
+- Live-Checkpoints waehrend des Spielens sind bewusst nicht Teil des empfohlenen Workflows, weil IdleOn dabei keine verlaesslichen Voll-Saves liefert.
 
 Nach jedem erfolgreichen Study-Export wird automatisch ein ZIP-Backup außerhalb des Repos geschrieben.
 Ein bestehendes Backup kann manuell angezeigt oder wiederhergestellt werden:

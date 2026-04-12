@@ -82,7 +82,22 @@ def load_session_state(repo_root: Path) -> Optional[StudySessionState]:
         return None
     data = json.loads(path.read_text(encoding="utf-8"))
     data.setdefault("save_account", "")
-    return StudySessionState(**data)
+    data.setdefault("last_export_at", "")
+    data.setdefault("last_snapshot_id", "")
+    normalized = {
+        "account_label": data.get("account_label", ""),
+        "strategy_label": data.get("strategy_label", ""),
+        "study_group": data.get("study_group", ""),
+        "session_id": data.get("session_id", ""),
+        "save_path": data.get("save_path", ""),
+        "save_account": data.get("save_account", ""),
+        "export_dir": data.get("export_dir", ""),
+        "started_at": data.get("started_at", ""),
+        "last_export_at": data.get("last_export_at", ""),
+        "last_snapshot_id": data.get("last_snapshot_id", ""),
+        "status": data.get("status", "active"),
+    }
+    return StudySessionState(**normalized)
 
 
 def save_session_state(repo_root: Path, state: StudySessionState) -> Path:
@@ -362,60 +377,36 @@ def session_start(
     debug_json: bool = False,
     dry_run: bool = False,
     now: Optional[datetime] = None,
-) -> tuple[ExportResult, StudySessionState]:
+) -> StudySessionState:
     if load_session_state(config.repo_root) is not None:
         raise StudySessionError("Es gibt bereits eine aktive Session. Beende sie erst mit study session-end.")
 
     account = resolve_account(config, account_name)
-    extra_tags = validate_tags(config, tags or [])
+    del notes, tags, overwrite, allow_empty_characters, debug_json
     save_path = save_path_for_account(config, account, save_path_override)
+    if not save_path.exists():
+        raise StudySessionError(f"Save-Pfad existiert nicht: {save_path}")
+    if not save_path.is_dir():
+        raise StudySessionError(f"Save-Pfad ist kein Verzeichnis: {save_path}")
     save_account = save_account_for_account(config, account, save_account_override)
     output_dir = export_dir_for_account(config, account, output_dir_override)
     session_id = next_session_id(account.account_label, output_dir, now=now)
-    metadata = {
-        "account_label": account.account_label,
-        "study_group": study_group_override or config.default_study_group,
-        "session_id": session_id,
-        "run_type": "checkpoint",
-        "strategy_label": account.strategy_label,
-        "notes": notes,
-        "playtime_minutes_since_last_snapshot": "",
-        "tags": ["session_start", *extra_tags],
-    }
-    result, resolved_save_account = _perform_export(
-        account=account,
-        save_path=save_path,
-        save_account=save_account,
-        output_dir=output_dir,
-        append=False,
-        overwrite=overwrite,
-        allow_empty_characters=allow_empty_characters,
-        debug_json=debug_json,
-        dry_run=dry_run,
-        metadata=metadata,
-    )
     started_at = (now or datetime.now()).isoformat(timespec="seconds")
     state = StudySessionState(
         account_label=account.account_label,
         strategy_label=account.strategy_label,
-        study_group=metadata["study_group"],
+        study_group=study_group_override or config.default_study_group,
         session_id=session_id,
         save_path=str(save_path),
-        save_account=resolved_save_account,
+        save_account=save_account,
         export_dir=str(output_dir),
         started_at=started_at,
-        last_export_at=result.timestamp,
-        last_snapshot_id=result.snapshot_id,
+        last_export_at="",
+        last_snapshot_id="",
     )
     if not dry_run:
         save_session_state(config.repo_root, state)
-    _run_automatic_backup(
-        config=config,
-        account=account,
-        result=result,
-        session_state_file=None if dry_run else session_state_path(config.repo_root),
-    )
-    return result, state
+    return state
 
 
 def _require_active_state(config: StudyConfig) -> StudySessionState:
@@ -434,43 +425,13 @@ def checkpoint_export(
     allow_empty_characters: bool = False,
     debug_json: bool = False,
     dry_run: bool = False,
-) -> tuple[ExportResult, StudySessionState]:
-    state = _require_active_state(config)
-    account = resolve_account(config, resolve_account_name_by_label(config, state.account_label))
-    chosen_tags = validate_tags(config, tags or [])
-    metadata = {
-        "account_label": state.account_label,
-        "study_group": state.study_group,
-        "session_id": state.session_id,
-        "run_type": "checkpoint",
-        "strategy_label": state.strategy_label,
-        "notes": notes,
-        "playtime_minutes_since_last_snapshot": "" if playtime_minutes is None else playtime_minutes,
-        "tags": chosen_tags,
-    }
-    result, _resolved_save_account = _perform_export(
-        account=account,
-        save_path=Path(state.save_path),
-        save_account=state.save_account,
-        output_dir=Path(state.export_dir),
-        append=True,
-        overwrite=False,
-        allow_empty_characters=allow_empty_characters,
-        debug_json=debug_json,
-        dry_run=dry_run,
-        metadata=metadata,
+) -> None:
+    del config, notes, playtime_minutes, tags, allow_empty_characters, debug_json, dry_run
+    raise StudySessionError(
+        "checkpoint ist nicht mehr Teil des empfohlenen Workflows. "
+        "IdleOn liefert waehrend des Spielens keine verlaesslichen Voll-Saves. "
+        "Nutze session-end nach sauberem Spielende."
     )
-    state.last_export_at = result.timestamp
-    state.last_snapshot_id = result.snapshot_id
-    if not dry_run:
-        save_session_state(config.repo_root, state)
-    _run_automatic_backup(
-        config=config,
-        account=account,
-        result=result,
-        session_state_file=None if dry_run else session_state_path(config.repo_root),
-    )
-    return result, state
 
 
 def milestone_export(
@@ -482,43 +443,12 @@ def milestone_export(
     allow_empty_characters: bool = False,
     debug_json: bool = False,
     dry_run: bool = False,
-) -> tuple[ExportResult, StudySessionState]:
-    state = _require_active_state(config)
-    account = resolve_account(config, resolve_account_name_by_label(config, state.account_label))
-    chosen_tags = validate_milestone_tags(config, tags)
-    metadata = {
-        "account_label": state.account_label,
-        "study_group": state.study_group,
-        "session_id": state.session_id,
-        "run_type": "milestone",
-        "strategy_label": state.strategy_label,
-        "notes": notes,
-        "playtime_minutes_since_last_snapshot": "" if playtime_minutes is None else playtime_minutes,
-        "tags": chosen_tags,
-    }
-    result, _resolved_save_account = _perform_export(
-        account=account,
-        save_path=Path(state.save_path),
-        save_account=state.save_account,
-        output_dir=Path(state.export_dir),
-        append=True,
-        overwrite=False,
-        allow_empty_characters=allow_empty_characters,
-        debug_json=debug_json,
-        dry_run=dry_run,
-        metadata=metadata,
+) -> None:
+    del config, tags, notes, playtime_minutes, allow_empty_characters, debug_json, dry_run
+    raise StudySessionError(
+        "milestone ist nicht mehr Teil des empfohlenen Workflows. "
+        "Leite Ereignisse spaeter aus baseline und session-end ab."
     )
-    state.last_export_at = result.timestamp
-    state.last_snapshot_id = result.snapshot_id
-    if not dry_run:
-        save_session_state(config.repo_root, state)
-    _run_automatic_backup(
-        config=config,
-        account=account,
-        result=result,
-        session_state_file=None if dry_run else session_state_path(config.repo_root),
-    )
-    return result, state
 
 
 def session_end(
@@ -607,7 +537,7 @@ def study_status(config: StudyConfig) -> StudyStatus:
     return StudyStatus(
         active=True,
         state=state,
-        next_step="Naechster Schritt: checkpoint, milestone oder session-end.",
+        next_step="Naechster Schritt: Spiel beenden und danach session-end ausfuehren.",
         last_manifest_path=last_manifest_path,
     )
 

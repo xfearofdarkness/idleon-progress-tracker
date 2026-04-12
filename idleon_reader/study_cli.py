@@ -19,10 +19,8 @@ from .study_session import (
     StudySessionError,
     backup_now,
     baseline_export,
-    checkpoint_export,
     load_session_state,
     default_account_name,
-    milestone_export,
     session_end,
     session_start,
     study_status,
@@ -66,30 +64,10 @@ def create_study_parser() -> argparse.ArgumentParser:
     _add_shared_export_arguments(baseline_parser, allow_playtime=False, allow_overwrite=True)
     baseline_parser.set_defaults(handler=cmd_baseline)
 
-    session_start_parser = subparsers.add_parser("session-start", help="Starte eine Session und schreibe den ersten Snapshot.")
+    session_start_parser = subparsers.add_parser("session-start", help="Starte eine Session ohne Save-Export.")
     session_start_parser.add_argument("--account", default="", help="Profilname aus study_profiles.toml.")
-    _add_shared_export_arguments(session_start_parser, allow_playtime=False, allow_overwrite=True)
+    _add_session_start_arguments(session_start_parser)
     session_start_parser.set_defaults(handler=cmd_session_start)
-
-    checkpoint_parser = subparsers.add_parser("checkpoint", help="Schreibe einen Checkpoint fuer die aktive Session.")
-    _add_shared_export_arguments(
-        checkpoint_parser,
-        allow_save_path=False,
-        allow_save_account=False,
-        allow_output_dir=False,
-        allow_study_group=False,
-    )
-    checkpoint_parser.set_defaults(handler=cmd_checkpoint)
-
-    milestone_parser = subparsers.add_parser("milestone", help="Schreibe einen Milestone-Snapshot fuer die aktive Session.")
-    _add_shared_export_arguments(
-        milestone_parser,
-        allow_save_path=False,
-        allow_save_account=False,
-        allow_output_dir=False,
-        allow_study_group=False,
-    )
-    milestone_parser.set_defaults(handler=cmd_milestone)
 
     session_end_parser = subparsers.add_parser("session-end", help="Beende die aktive Session mit dem letzten Snapshot.")
     _add_shared_export_arguments(
@@ -152,6 +130,18 @@ def _add_shared_export_arguments(
             default=None,
             help="Geschaetzte Spielzeit seit dem letzten Snapshot in Minuten.",
         )
+
+
+def _add_session_start_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--save-path", default="", help="Optionaler Override fuer den Save-Pfad.")
+    parser.add_argument(
+        "--save-account",
+        default="",
+        help="Optionaler selector oder Index, falls ein Save mehrere Accounts enthaelt.",
+    )
+    parser.add_argument("--output-dir", default="", help="Optionaler Override fuer den Zielordner.")
+    parser.add_argument("--study-group", default="", help="Optionaler Override fuer die Studiengruppe.")
+    parser.add_argument("--dry-run", action="store_true", help="Zeige den Session-Kontext, ohne ihn zu speichern.")
 
 
 def _non_negative_int(value: str) -> int:
@@ -324,55 +314,28 @@ def cmd_baseline(args: argparse.Namespace) -> int:
 def cmd_session_start(args: argparse.Namespace) -> int:
     config = load_study_config()
     account_name = args.account or default_account_name(config)
-    result, state = session_start(
+    state = session_start(
         config,
         account_name=account_name,
-        notes=args.notes,
-        tags=args.tag,
         save_path_override=args.save_path,
         save_account_override=args.save_account,
         output_dir_override=args.output_dir,
         study_group_override=args.study_group,
-        overwrite=getattr(args, "overwrite", False),
-        allow_empty_characters=args.allow_empty_characters,
-        debug_json=args.debug_json,
         dry_run=args.dry_run,
     )
-    _print_export_summary(result)
+    print("[*] Session gestartet")
+    print(f"[*] Account:     {state.account_label}")
+    print(f"[*] Session-ID:  {state.session_id}")
+    print(f"[*] Exportpfad:  {state.export_dir}")
+    print(f"[*] Save-Pfad:   {state.save_path}")
+    print(f"[*] Studiengruppe: {state.study_group}")
     if state.save_account:
         print(f"[*] Save-Account: {state.save_account}")
-    if not args.dry_run:
+    if args.dry_run:
+        print("[*] No files written (--dry-run).")
+    else:
         print(f"[*] Aktive Session: {state.session_id}")
-    return 0
-
-
-def cmd_checkpoint(args: argparse.Namespace) -> int:
-    config = load_study_config()
-    result, _state = checkpoint_export(
-        config,
-        notes=args.notes,
-        playtime_minutes=args.playtime_minutes,
-        tags=args.tag,
-        allow_empty_characters=args.allow_empty_characters,
-        debug_json=args.debug_json,
-        dry_run=args.dry_run,
-    )
-    _print_export_summary(result)
-    return 0
-
-
-def cmd_milestone(args: argparse.Namespace) -> int:
-    config = load_study_config()
-    result, _state = milestone_export(
-        config,
-        tags=args.tag,
-        notes=args.notes,
-        playtime_minutes=args.playtime_minutes,
-        allow_empty_characters=args.allow_empty_characters,
-        debug_json=args.debug_json,
-        dry_run=args.dry_run,
-    )
-    _print_export_summary(result)
+        print("[*] Hinweis:      Exportiere erst mit session-end nach sauberem Spielende.")
     return 0
 
 

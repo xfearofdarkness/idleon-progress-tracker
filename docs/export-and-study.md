@@ -162,23 +162,29 @@ Einfache Study-Kommandos:
 ```bash
 python -m idleon_reader study baseline --tag baseline
 python -m idleon_reader study session-start
-python -m idleon_reader study checkpoint --playtime-minutes 30
-python -m idleon_reader study milestone --tag reached_level_10 --playtime-minutes 45
 python -m idleon_reader study session-end --playtime-minutes 60
 python -m idleon_reader study status
 ```
 
-Fuer Problemfaelle kann derselbe eingelesene Save zusaetzlich als Debug-JSON geschrieben werden:
+Wichtige Regel:
+
+- `session-start` legt nur den Session-Kontext an.
+- Erst `baseline` und `session-end` erzeugen belastbare Save-Snapshots.
+- Live-Checkpoints waehrend des Spielens sind nicht mehr Teil des empfohlenen Workflows, weil IdleOn lokal keine verlaesslichen Voll-Saves garantiert.
+
+Fuer Problemfaelle kann derselbe eingelesene Save bei den echten Snapshot-Kommandos zusaetzlich als Debug-JSON geschrieben werden:
 
 ```bash
-python -m idleon_reader study checkpoint --debug-json
+python -m idleon_reader study baseline --debug-json
+python -m idleon_reader study session-end --debug-json
 ```
 
 Ein leerer Charakterzustand wird auch im Study-Workflow standardmaessig blockiert.
-Nur fuer bewusste Ausnahmen:
+Nur fuer bewusste Ausnahmen bei echten Snapshot-Kommandos:
 
 ```bash
-python -m idleon_reader study checkpoint --allow-empty-characters
+python -m idleon_reader study baseline --allow-empty-characters
+python -m idleon_reader study session-end --allow-empty-characters
 ```
 
 Wenn ein Account-Verlauf bewusst neu aufgebaut werden soll:

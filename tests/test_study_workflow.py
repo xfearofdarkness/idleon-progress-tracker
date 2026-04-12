@@ -367,28 +367,15 @@ def test_session_start_checkpoint_and_end_manage_state(tmp_path, monkeypatch):
     _write_study_files(tmp_path, fake_save)
     config = load_study_config(tmp_path)
 
-    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_save_data())
-
-    start_result, start_state = session_start(
+    start_state = session_start(
         config,
         account_name="speed_run",
-        tags=[],
         now=datetime(2026, 4, 9, 9, 0, 0),
     )
-    assert start_result.study_metadata["session_id"] == "speed_run-20260409-s01"
-    assert start_result.backup["success"] is True
+    assert start_state.session_id == "speed_run-20260409-s01"
     assert load_session_state(tmp_path).session_id == start_state.session_id
 
-    checkpoint_result, checkpoint_state = checkpoint_export(
-        config,
-        notes="mid session",
-        playtime_minutes=20,
-        tags=[],
-    )
-    assert checkpoint_result.append is True
-    assert checkpoint_result.backup["success"] is True
-    assert checkpoint_result.study_metadata["session_id"] == start_state.session_id
-    assert checkpoint_state.last_snapshot_id == checkpoint_result.snapshot_id
+    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_save_data())
 
     end_result, end_state = session_end(
         config,
@@ -403,11 +390,7 @@ def test_session_start_checkpoint_and_end_manage_state(tmp_path, monkeypatch):
 
     with open(tmp_path / "exports" / "study" / "speed_run" / "snapshots.csv", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
-    assert [row["session_id"] for row in rows if row["run_type"] != "baseline"] == [
-        start_state.session_id,
-        start_state.session_id,
-        start_state.session_id,
-    ]
+    assert [row["session_id"] for row in rows if row["run_type"] != "baseline"] == [start_state.session_id]
 
 
 def test_milestone_requires_allowed_tag(tmp_path, monkeypatch):
@@ -416,17 +399,30 @@ def test_milestone_requires_allowed_tag(tmp_path, monkeypatch):
     _write_study_files(tmp_path, fake_save)
     config = load_study_config(tmp_path)
 
-    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_save_data())
+    session_start(
+        config,
+        account_name="speed_run",
+        now=datetime(2026, 4, 9, 9, 0, 0),
+    )
+
+    with pytest.raises(StudySessionError, match="nicht mehr Teil des empfohlenen Workflows"):
+        milestone_export(config, tags=["unknown_tag"])
+
+
+def test_checkpoint_is_no_longer_supported(tmp_path):
+    fake_save = tmp_path / "fake-save"
+    fake_save.mkdir()
+    _write_study_files(tmp_path, fake_save)
+    config = load_study_config(tmp_path)
 
     session_start(
         config,
         account_name="speed_run",
-        tags=[],
         now=datetime(2026, 4, 9, 9, 0, 0),
     )
 
-    with pytest.raises(StudySessionError):
-        milestone_export(config, tags=["unknown_tag"])
+    with pytest.raises(StudySessionError, match="checkpoint ist nicht mehr Teil des empfohlenen Workflows"):
+        checkpoint_export(config)
 
 
 def test_study_status_reports_active_and_inactive(tmp_path, monkeypatch):
@@ -439,16 +435,15 @@ def test_study_status_reports_active_and_inactive(tmp_path, monkeypatch):
     inactive = study_status(config)
     assert inactive.active is False
 
-    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_save_data())
     session_start(
         config,
         account_name="speed_run",
-        tags=[],
         now=datetime(2026, 4, 9, 9, 0, 0),
     )
     active = study_status(config)
     assert active.active is True
     assert active.state.account_label == "speed_run"
+    assert "session-end" in active.next_step
 
 
 def test_baseline_export_can_select_specific_save_account(tmp_path, monkeypatch):
@@ -472,27 +467,26 @@ def test_session_state_persists_selected_save_account(tmp_path, monkeypatch):
     _write_study_files(tmp_path, fake_save)
     config = load_study_config(tmp_path)
 
-    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_multi_save_data())
-
-    start_result, start_state = session_start(
+    start_state = session_start(
         config,
         account_name="speed_run",
         save_account_override="save_b",
-        tags=[],
         now=datetime(2026, 4, 9, 9, 0, 0),
     )
-    assert start_result.study_metadata["session_id"] == "speed_run-20260409-s01"
+    assert start_state.session_id == "speed_run-20260409-s01"
     assert start_state.save_account == "save_b"
     assert load_session_state(tmp_path).save_account == "save_b"
 
-    checkpoint_result, checkpoint_state = checkpoint_export(
+    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_multi_save_data())
+
+    end_result, end_state = session_end(
         config,
-        notes="mid session",
-        playtime_minutes=20,
+        notes="end session",
+        playtime_minutes=30,
         tags=[],
     )
-    assert checkpoint_result.study_metadata["session_id"] == start_state.session_id
-    assert checkpoint_state.save_account == "save_b"
+    assert end_result.study_metadata["session_id"] == start_state.session_id
+    assert end_state.save_account == "save_b"
 
     with open(tmp_path / "exports" / "study" / "speed_run" / "characters.csv", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
