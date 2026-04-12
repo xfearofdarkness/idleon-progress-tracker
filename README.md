@@ -35,6 +35,8 @@ Windows
 
 ## Schneller Export
 
+Vor jedem Export IdleOn vollständig schließen. Das Tool bricht jetzt bewusst ab, wenn der Spielprozess noch läuft oder sich die Save-Dateien noch verändern. Das gilt auf macOS auch für CrossOver-/Wine-Starts, sofern der Prozessbezug zu IdleOn im Kommando erkennbar ist.
+
 Standard-Export:
 
 ```bash

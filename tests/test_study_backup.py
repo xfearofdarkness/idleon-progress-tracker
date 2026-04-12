@@ -54,6 +54,7 @@ def _sample_save_data():
 
 
 def _write_study_files(root: Path, save_path: Path, *, backup_root: Path, include_local_config: bool = True) -> None:
+    (save_path / "000001.log").write_bytes(b"stub")
     (root / "study_profiles.toml").write_text(
         """[study]
 default_export_root = "exports/study"

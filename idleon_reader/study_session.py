@@ -13,6 +13,7 @@ from typing import Optional
 from .export_tidy import ExportResult, export_tidy_csvs
 from .finder import find_save_directory
 from .ldb_reader import read_save_data
+from .save_guard import SaveGuardError, ensure_save_ready, evaluate_save_health
 from .save_accounts import SaveAccountSelectionError, select_save_account
 from .study_backup import (
     BackupRecord,
@@ -171,11 +172,11 @@ def _perform_export(
     dry_run: bool,
     metadata: dict,
 ) -> tuple[ExportResult, str]:
-    if not save_path.exists():
-        raise StudySessionError(f"Save-Pfad existiert nicht: {save_path}")
-    if not save_path.is_dir():
-        raise StudySessionError(f"Save-Pfad ist kein Verzeichnis: {save_path}")
-    raw_data = read_save_data(save_path)
+    try:
+        ensure_save_ready(save_path)
+        raw_data = read_save_data(save_path)
+    except SaveGuardError as exc:
+        raise StudySessionError(str(exc)) from exc
     if not raw_data:
         raise StudySessionError("Keine Daten im Save gefunden.")
     try:
@@ -185,6 +186,10 @@ def _perform_export(
             allow_prompt=True,
         )
     except SaveAccountSelectionError as exc:
+        raise StudySessionError(str(exc)) from exc
+    try:
+        evaluate_save_health(selected_data)
+    except SaveGuardError as exc:
         raise StudySessionError(str(exc)) from exc
     result = export_tidy_csvs(
         selected_data,

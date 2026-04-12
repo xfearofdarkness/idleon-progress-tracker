@@ -23,6 +23,7 @@ from .finder import find_save_directory, get_save_info
 from .ldb_reader import read_save_data
 from .progress import extract_progress_summary, format_progress_report
 from .export_tidy import ExportValidationError, RUN_TYPE_CHOICES, export_tidy_csvs
+from .save_guard import SaveGuardError, ensure_save_ready, evaluate_save_health
 from .save_accounts import (
     SaveAccountSelectionError,
     format_save_account_candidates,
@@ -252,6 +253,7 @@ def cmd_read(args):
     # Read the data
     print("[*] Lese Speicherdaten...")
     try:
+        ensure_save_ready(db_path)
         raw_data = read_save_data(db_path)
     except Exception as e:
         print(f"[!] Fehler beim Lesen der Daten: {e}")
@@ -279,12 +281,23 @@ def cmd_read(args):
 
     if args.list_save_accounts:
         if not candidates:
+            try:
+                evaluate_save_health(selected_data)
+            except SaveGuardError as exc:
+                print(f"[!] {exc}")
+                sys.exit(1)
             print("[*] Keine getrennten Save-Accounts erkannt.")
         else:
             print("\n  Erkannte Save-Accounts:")
             for line in format_save_account_candidates(candidates):
                 print(line)
         return
+
+    try:
+        evaluate_save_health(selected_data)
+    except SaveGuardError as exc:
+        print(f"[!] {exc}")
+        sys.exit(1)
 
     # Handle --raw-keys
     if args.raw_keys:

@@ -121,6 +121,7 @@ def _sample_multi_save_data():
 
 
 def _write_study_files(root: Path, save_path: Path, save_account: str = "", include_local_config: bool = True):
+    (save_path / "000001.log").write_bytes(b"stub")
     save_account_line = f'save_selector = "{save_account}"\n' if save_account else ""
     backup_root = root.parent / f"{root.name}-backups"
     (root / "study_profiles.toml").write_text(
@@ -157,6 +158,7 @@ include_local_config = {"true" if include_local_config else "false"}
 
 
 def _write_advanced_local_file(root: Path, save_path: Path, save_account: str = ""):
+    (save_path / "000001.log").write_bytes(b"stub")
     save_account_line = f'save_selector = "{save_account}"\n' if save_account else ""
     backup_root = root.parent / f"{root.name}-backups"
     (root / "study_local.toml").write_text(
