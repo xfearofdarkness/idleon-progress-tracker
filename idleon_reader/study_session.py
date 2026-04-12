@@ -58,6 +58,16 @@ class StudyStatus:
     last_manifest_path: Optional[Path] = None
 
 
+def _player_database_from_selected_data(data: dict) -> dict[str, dict]:
+    save = data.get("mySave", data)
+    if not isinstance(save, dict):
+        return {}
+    player_db = save.get("PlayerDATABASE")
+    if not isinstance(player_db, dict):
+        return {}
+    return player_db
+
+
 def state_dir(repo_root: Path) -> Path:
     return repo_root / ".idleon-study"
 
@@ -160,8 +170,31 @@ def validate_milestone_tags(config: StudyConfig, tags: list[str]) -> list[str]:
     return tags
 
 
+def validate_expected_characters(account: StudyAccountProfile, selected_data: dict) -> None:
+    player_db = _player_database_from_selected_data(selected_data)
+    actual_names = tuple(str(name) for name in player_db.keys())
+
+    if account.expected_character_names:
+        missing = [name for name in account.expected_character_names if name not in player_db]
+        if missing:
+            actual_display = ", ".join(actual_names) if actual_names else "keine"
+            raise StudySessionError(
+                "Der Save enthält nicht alle erwarteten Charaktere für dieses Studienprofil. "
+                f"Fehlend: {', '.join(missing)}. Gefunden: {actual_display}."
+            )
+
+    if account.expected_character_count and len(actual_names) < account.expected_character_count:
+        actual_display = ", ".join(actual_names) if actual_names else "keine"
+        raise StudySessionError(
+            "Der Save enthält weniger Charaktere als für dieses Studienprofil erwartet. "
+            f"Erwartet: mindestens {account.expected_character_count}, gefunden: {len(actual_names)} "
+            f"({actual_display})."
+        )
+
+
 def _perform_export(
     *,
+    account: StudyAccountProfile,
     save_path: Path,
     save_account: str,
     output_dir: Path,
@@ -191,6 +224,7 @@ def _perform_export(
         evaluate_save_health(selected_data)
     except SaveGuardError as exc:
         raise StudySessionError(str(exc)) from exc
+    validate_expected_characters(account, selected_data)
     result = export_tidy_csvs(
         selected_data,
         output_dir=output_dir,
@@ -293,6 +327,7 @@ def baseline_export(
         "tags": chosen_tags,
     }
     result, _resolved_save_account = _perform_export(
+        account=account,
         save_path=save_path,
         save_account=save_account,
         output_dir=output_dir,
@@ -348,6 +383,7 @@ def session_start(
         "tags": ["session_start", *extra_tags],
     }
     result, resolved_save_account = _perform_export(
+        account=account,
         save_path=save_path,
         save_account=save_account,
         output_dir=output_dir,
@@ -400,6 +436,7 @@ def checkpoint_export(
     dry_run: bool = False,
 ) -> tuple[ExportResult, StudySessionState]:
     state = _require_active_state(config)
+    account = resolve_account(config, resolve_account_name_by_label(config, state.account_label))
     chosen_tags = validate_tags(config, tags or [])
     metadata = {
         "account_label": state.account_label,
@@ -412,6 +449,7 @@ def checkpoint_export(
         "tags": chosen_tags,
     }
     result, _resolved_save_account = _perform_export(
+        account=account,
         save_path=Path(state.save_path),
         save_account=state.save_account,
         output_dir=Path(state.export_dir),
@@ -426,7 +464,6 @@ def checkpoint_export(
     state.last_snapshot_id = result.snapshot_id
     if not dry_run:
         save_session_state(config.repo_root, state)
-    account = resolve_account(config, resolve_account_name_by_label(config, state.account_label))
     _run_automatic_backup(
         config=config,
         account=account,
@@ -447,6 +484,7 @@ def milestone_export(
     dry_run: bool = False,
 ) -> tuple[ExportResult, StudySessionState]:
     state = _require_active_state(config)
+    account = resolve_account(config, resolve_account_name_by_label(config, state.account_label))
     chosen_tags = validate_milestone_tags(config, tags)
     metadata = {
         "account_label": state.account_label,
@@ -459,6 +497,7 @@ def milestone_export(
         "tags": chosen_tags,
     }
     result, _resolved_save_account = _perform_export(
+        account=account,
         save_path=Path(state.save_path),
         save_account=state.save_account,
         output_dir=Path(state.export_dir),
@@ -473,7 +512,6 @@ def milestone_export(
     state.last_snapshot_id = result.snapshot_id
     if not dry_run:
         save_session_state(config.repo_root, state)
-    account = resolve_account(config, resolve_account_name_by_label(config, state.account_label))
     _run_automatic_backup(
         config=config,
         account=account,
@@ -494,6 +532,7 @@ def session_end(
     dry_run: bool = False,
 ) -> tuple[ExportResult, StudySessionState]:
     state = _require_active_state(config)
+    account = resolve_account(config, resolve_account_name_by_label(config, state.account_label))
     chosen_tags = validate_tags(config, tags or [])
     metadata = {
         "account_label": state.account_label,
@@ -506,6 +545,7 @@ def session_end(
         "tags": ["session_end", *chosen_tags],
     }
     result, _resolved_save_account = _perform_export(
+        account=account,
         save_path=Path(state.save_path),
         save_account=state.save_account,
         output_dir=Path(state.export_dir),
@@ -520,7 +560,6 @@ def session_end(
     state.last_snapshot_id = result.snapshot_id
     if not dry_run:
         clear_session_state(config.repo_root)
-    account = resolve_account(config, resolve_account_name_by_label(config, state.account_label))
     _run_automatic_backup(
         config=config,
         account=account,

@@ -139,6 +139,24 @@ Bedeutung:
 - `backup.root`: lokaler Backup-Ordner außerhalb des Repos
 - `backup.include_local_config`: nimmt `study_local.toml` mit ins Archiv auf
 
+Optional im Profil:
+
+```toml
+[accounts.account_1]
+account_label = "account_1"
+strategy_label = "custom"
+export_subdir = "account_1"
+expected_character_names = ["Alpha"]
+expected_character_count = 1
+```
+
+Bedeutung:
+
+- `expected_character_names`: diese Charakternamen müssen im Save vorhanden sein
+- `expected_character_count`: Mindestanzahl an Charakteren für dieses Profil
+
+Wenn einer dieser Checks fehlschlägt, blockt der Study-Workflow den Export mit einer klaren Fehlermeldung.
+
 Einfache Study-Kommandos:
 
 ```bash

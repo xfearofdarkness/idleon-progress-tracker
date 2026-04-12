@@ -21,6 +21,8 @@ class StudyAccountProfile:
     account_label: str
     strategy_label: str
     export_subdir: str
+    expected_character_names: tuple[str, ...] = ()
+    expected_character_count: int = 0
     save_path: str = ""
     save_account: str = ""
 
@@ -122,6 +124,9 @@ allowed_run_types = ["baseline", "checkpoint", "session_end", "milestone"]
 account_label = "account_1"
 strategy_label = "custom"
 export_subdir = "account_1"
+# Optional stricter validation for study exports:
+# expected_character_names = ["Alpha"]
+# expected_character_count = 1
 
 [accounts.account_2]
 account_label = "account_2"
@@ -229,6 +234,31 @@ def load_study_config(repo_root: Optional[Path] = None) -> StudyConfig:
         account_label = str(account_data.get("account_label", "")).strip()
         strategy_label = str(account_data.get("strategy_label", "")).strip()
         export_subdir = str(account_data.get("export_subdir", "")).strip()
+        expected_character_names_raw = account_data.get("expected_character_names", [])
+        if expected_character_names_raw in ("", None):
+            expected_character_names_raw = []
+        if not isinstance(expected_character_names_raw, list):
+            raise StudyConfigError(
+                f"Profil '{profile_name}': expected_character_names muss eine Liste sein."
+            )
+        expected_character_names = tuple(
+            str(value).strip() for value in expected_character_names_raw if str(value).strip()
+        )
+        expected_character_count_raw = account_data.get("expected_character_count", 0)
+        if expected_character_count_raw in ("", None):
+            expected_character_count_raw = 0
+        if not isinstance(expected_character_count_raw, int):
+            raise StudyConfigError(
+                f"Profil '{profile_name}': expected_character_count muss eine ganze Zahl sein."
+            )
+        if expected_character_count_raw < 0:
+            raise StudyConfigError(
+                f"Profil '{profile_name}': expected_character_count darf nicht negativ sein."
+            )
+        if expected_character_count_raw and expected_character_count_raw < len(expected_character_names):
+            raise StudyConfigError(
+                f"Profil '{profile_name}': expected_character_count ist kleiner als expected_character_names."
+            )
         if not account_label or not strategy_label or not export_subdir:
             raise StudyConfigError(
                 f"Profil '{profile_name}' braucht account_label, strategy_label und export_subdir."
@@ -245,6 +275,8 @@ def load_study_config(repo_root: Optional[Path] = None) -> StudyConfig:
             account_label=account_label,
             strategy_label=strategy_label,
             export_subdir=export_subdir,
+            expected_character_names=expected_character_names,
+            expected_character_count=expected_character_count_raw,
             save_path=save_path,
             save_account=save_account,
         )

@@ -120,12 +120,25 @@ def _sample_multi_save_data():
     }
 
 
-def _write_study_files(root: Path, save_path: Path, save_account: str = "", include_local_config: bool = True):
+def _write_study_files(
+    root: Path,
+    save_path: Path,
+    save_account: str = "",
+    include_local_config: bool = True,
+    expected_character_names: tuple[str, ...] = (),
+    expected_character_count: int = 0,
+):
     (save_path / "000001.log").write_bytes(b"stub")
     save_account_line = f'save_selector = "{save_account}"\n' if save_account else ""
     backup_root = root.parent / f"{root.name}-backups"
+    expected_names_line = ""
+    if expected_character_names:
+        expected_names_line = "expected_character_names = [" + ", ".join(f'"{name}"' for name in expected_character_names) + "]\n"
+    expected_count_line = ""
+    if expected_character_count:
+        expected_count_line = f"expected_character_count = {expected_character_count}\n"
     (root / "study_profiles.toml").write_text(
-        """[study]
+        f"""[study]
 default_export_root = "exports/study"
 default_study_group = "main"
 allowed_tags = ["baseline", "session_start", "session_end", "reached_level_10"]
@@ -136,6 +149,7 @@ allowed_run_types = ["baseline", "checkpoint", "session_end", "milestone"]
 account_label = "speed_run"
 strategy_label = "speed"
 export_subdir = "speed_run"
+{expected_names_line}{expected_count_line}
 
 [accounts.skill_focus]
 account_label = "skill_focus"
@@ -187,6 +201,8 @@ def test_load_study_config_and_examples(tmp_path):
     assert config.include_local_config_in_backup is True
     assert config.accounts["speed_run"].save_path == ""
     assert config.accounts["speed_run"].save_account == ""
+    assert config.accounts["speed_run"].expected_character_names == ()
+    assert config.accounts["speed_run"].expected_character_count == 0
 
     created = ensure_example_files(tmp_path)
     assert "study_profiles.toml.example" in created
@@ -247,6 +263,71 @@ def test_baseline_export_writes_without_session_state(tmp_path, monkeypatch):
     assert result.backup["success"] is True
     assert load_session_state(tmp_path) is None
     assert (tmp_path / "exports" / "study" / "speed_run" / "snapshots.csv").exists()
+
+
+def test_baseline_export_validates_expected_character_names(tmp_path, monkeypatch):
+    fake_save = tmp_path / "fake-save"
+    fake_save.mkdir()
+    _write_study_files(
+        tmp_path,
+        fake_save,
+        expected_character_names=("Alpha",),
+        expected_character_count=1,
+    )
+    config = load_study_config(tmp_path)
+
+    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_save_data())
+
+    result = baseline_export(config, account_name="speed_run", tags=["baseline"])
+
+    assert result.study_metadata["account_label"] == "speed_run"
+
+
+def test_baseline_export_rejects_missing_expected_character_names(tmp_path, monkeypatch):
+    fake_save = tmp_path / "fake-save"
+    fake_save.mkdir()
+    _write_study_files(
+        tmp_path,
+        fake_save,
+        expected_character_names=("MissingAlpha",),
+        expected_character_count=1,
+    )
+    config = load_study_config(tmp_path)
+
+    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_save_data())
+
+    with pytest.raises(StudySessionError, match="Fehlend: MissingAlpha"):
+        baseline_export(config, account_name="speed_run", tags=["baseline"])
+
+
+def test_baseline_export_rejects_expected_character_count_shortfall(tmp_path, monkeypatch):
+    fake_save = tmp_path / "fake-save"
+    fake_save.mkdir()
+    _write_study_files(
+        tmp_path,
+        fake_save,
+        expected_character_count=2,
+    )
+    config = load_study_config(tmp_path)
+
+    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_save_data())
+
+    with pytest.raises(StudySessionError, match="Erwartet: mindestens 2, gefunden: 1"):
+        baseline_export(config, account_name="speed_run", tags=["baseline"])
+
+
+def test_load_study_config_rejects_expected_count_smaller_than_names(tmp_path):
+    fake_save = tmp_path / "fake-save"
+    fake_save.mkdir()
+    _write_study_files(
+        tmp_path,
+        fake_save,
+        expected_character_names=("Alpha", "Beta"),
+        expected_character_count=1,
+    )
+
+    with pytest.raises(StudyConfigError, match="expected_character_count ist kleiner"):
+        load_study_config(tmp_path)
 
 
 def test_baseline_export_can_write_debug_json(tmp_path, monkeypatch):

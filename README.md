@@ -84,6 +84,17 @@ save_selector = "mySave"
 root = "/absolute/path/outside/repo"
 ```
 
+Optional kann das Studienprofil in `study_profiles.toml` auch den erwarteten Charakterbestand festlegen. Dann blockt der Study-Workflow automatisch, wenn im Save Charaktere fehlen:
+
+```toml
+[accounts.account_1]
+account_label = "account_1"
+strategy_label = "custom"
+export_subdir = "account_1"
+expected_character_names = ["Alpha"]
+expected_character_count = 1
+```
+
 Danach funktionieren die einfachen Study-Kommandos ohne lange Flag-Ketten:
 
 ```bash
