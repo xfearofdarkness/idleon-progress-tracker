@@ -219,6 +219,23 @@ def test_export_tidy_csvs(sample_save_data, tmp_path):
     assert manifest["table_row_counts"]["snapshot_tags"] == 2
 
 
+def test_debug_json_writes_same_read_payload(sample_save_data, tmp_path):
+    result = export_tidy_csvs(
+        sample_save_data,
+        tmp_path,
+        source_path="test-save",
+        timestamp="2026-01-01T00:00:00Z",
+        debug_json=True,
+    )
+
+    assert result.debug_json_path is not None
+    debug_payload = json.loads(result.debug_json_path.read_text(encoding="utf-8"))
+    assert debug_payload == sample_save_data
+
+    manifest = json.loads((tmp_path / "run_manifests" / f"{result.snapshot_id}.json").read_text(encoding="utf-8"))
+    assert manifest["debug_json_path"] == str(result.debug_json_path)
+
+
 def test_append_mode(sample_save_data, tmp_path):
     export_tidy_csvs(sample_save_data, tmp_path, source_path="a", timestamp="2026-01-01T00:00:00Z")
     result = export_tidy_csvs(sample_save_data, tmp_path, source_path="a", timestamp="2026-01-02T00:00:00Z", append=True)
@@ -282,6 +299,18 @@ def test_dry_run_writes_nothing(sample_save_data, tmp_path):
     assert not (tmp_path / "dry-run").exists()
 
 
+def test_dry_run_rejects_debug_json(sample_save_data, tmp_path):
+    with pytest.raises(ValueError):
+        export_tidy_csvs(
+            sample_save_data,
+            tmp_path / "dry-run",
+            source_path="a",
+            timestamp="2026-01-01T00:00:00Z",
+            dry_run=True,
+            debug_json=True,
+        )
+
+
 def test_append_mode_rejects_old_schema(sample_save_data, tmp_path):
     (tmp_path / "snapshots.csv").write_text("snapshot_id,timestamp,source_path\nold,2026-01-01T00:00:00Z,a\n", encoding="utf-8")
     for table_name in [
@@ -318,6 +347,44 @@ def test_duplicate_key_validation(sample_save_data, tmp_path):
         export_tidy.extract_tidy_account_metrics = original
 
     assert "Duplicate natural keys detected." in str(excinfo.value)
+
+
+def test_empty_characters_fail_by_default(tmp_path):
+    sample_save_data = {
+        "mySave": {
+            "Money": 123,
+            "Cards": [],
+            "StarSignsUnlocked": {},
+        }
+    }
+
+    with pytest.raises(ExportValidationError) as excinfo:
+        export_tidy_csvs(sample_save_data, tmp_path, source_path="a", timestamp="2026-01-01T00:00:00Z")
+
+    assert "characters.csv ist leer" in str(excinfo.value)
+
+
+def test_empty_characters_can_be_allowed_and_debugged(tmp_path):
+    sample_save_data = {
+        "mySave": {
+            "Money": 123,
+            "Cards": [],
+            "StarSignsUnlocked": {},
+        }
+    }
+
+    result = export_tidy_csvs(
+        sample_save_data,
+        tmp_path,
+        source_path="a",
+        timestamp="2026-01-01T00:00:00Z",
+        allow_empty_characters=True,
+        debug_json=True,
+    )
+
+    assert result.debug_json_path is not None
+    assert result.warnings
+    assert any("characters.csv ist leer" in warning for warning in result.warnings)
 
 
 def test_manifest_row_counts_match_written_rows(sample_save_data, tmp_path):

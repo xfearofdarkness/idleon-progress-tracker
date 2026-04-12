@@ -129,6 +129,16 @@ def _add_shared_export_arguments(
     parser.add_argument("--notes", default="", help="Freitextnotiz fuer diesen Export.")
     parser.add_argument("--tag", action="append", default=[], help="Zusatz-Tag fuer den Export.")
     parser.add_argument("--dry-run", action="store_true", help="Validiere und zeige den Export, ohne Dateien zu schreiben.")
+    parser.add_argument(
+        "--debug-json",
+        action="store_true",
+        help="Schreibe denselben eingelesenen Save zusaetzlich nach debug_raw/<snapshot_id>.json",
+    )
+    parser.add_argument(
+        "--allow-empty-characters",
+        action="store_true",
+        help="Erlaube einen Export auch dann, wenn keine Charaktere erkannt wurden",
+    )
     if allow_overwrite:
         parser.add_argument(
             "--overwrite",
@@ -301,6 +311,8 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         output_dir_override=args.output_dir,
         study_group_override=args.study_group,
         overwrite=getattr(args, "overwrite", False),
+        allow_empty_characters=args.allow_empty_characters,
+        debug_json=args.debug_json,
         dry_run=args.dry_run,
     )
     _print_export_summary(result)
@@ -322,6 +334,8 @@ def cmd_session_start(args: argparse.Namespace) -> int:
         output_dir_override=args.output_dir,
         study_group_override=args.study_group,
         overwrite=getattr(args, "overwrite", False),
+        allow_empty_characters=args.allow_empty_characters,
+        debug_json=args.debug_json,
         dry_run=args.dry_run,
     )
     _print_export_summary(result)
@@ -339,6 +353,8 @@ def cmd_checkpoint(args: argparse.Namespace) -> int:
         notes=args.notes,
         playtime_minutes=args.playtime_minutes,
         tags=args.tag,
+        allow_empty_characters=args.allow_empty_characters,
+        debug_json=args.debug_json,
         dry_run=args.dry_run,
     )
     _print_export_summary(result)
@@ -352,6 +368,8 @@ def cmd_milestone(args: argparse.Namespace) -> int:
         tags=args.tag,
         notes=args.notes,
         playtime_minutes=args.playtime_minutes,
+        allow_empty_characters=args.allow_empty_characters,
+        debug_json=args.debug_json,
         dry_run=args.dry_run,
     )
     _print_export_summary(result)
@@ -365,6 +383,8 @@ def cmd_session_end(args: argparse.Namespace) -> int:
         notes=args.notes,
         playtime_minutes=args.playtime_minutes,
         tags=args.tag,
+        allow_empty_characters=args.allow_empty_characters,
+        debug_json=args.debug_json,
         dry_run=args.dry_run,
     )
     _print_export_summary(result)
@@ -394,6 +414,8 @@ def _print_export_summary(result: ExportResult) -> None:
         print(f"[*] Dokumentation: {result.output_dir}/data_dictionary.csv")
         if result.manifest_path:
             print(f"[*] Manifest:      {result.manifest_path}")
+        if result.debug_json_path:
+            print(f"[*] Debug-JSON:    {result.debug_json_path}")
         if result.backup:
             if result.backup.get("success"):
                 print("[*] Backup:        OK")

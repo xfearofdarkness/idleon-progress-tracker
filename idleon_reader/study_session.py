@@ -166,6 +166,8 @@ def _perform_export(
     output_dir: Path,
     append: bool,
     overwrite: bool,
+    allow_empty_characters: bool,
+    debug_json: bool,
     dry_run: bool,
     metadata: dict,
 ) -> tuple[ExportResult, str]:
@@ -190,6 +192,8 @@ def _perform_export(
         source_path=str(save_path),
         append=append,
         overwrite=overwrite,
+        allow_empty_characters=allow_empty_characters,
+        debug_json=debug_json,
         dry_run=dry_run,
         metadata=metadata,
     )
@@ -264,6 +268,8 @@ def baseline_export(
     output_dir_override: str = "",
     study_group_override: str = "",
     overwrite: bool = False,
+    allow_empty_characters: bool = False,
+    debug_json: bool = False,
     dry_run: bool = False,
 ) -> ExportResult:
     account = resolve_account(config, account_name)
@@ -287,6 +293,8 @@ def baseline_export(
         output_dir=output_dir,
         append=False,
         overwrite=overwrite,
+        allow_empty_characters=allow_empty_characters,
+        debug_json=debug_json,
         dry_run=dry_run,
         metadata=metadata,
     )
@@ -310,6 +318,8 @@ def session_start(
     output_dir_override: str = "",
     study_group_override: str = "",
     overwrite: bool = False,
+    allow_empty_characters: bool = False,
+    debug_json: bool = False,
     dry_run: bool = False,
     now: Optional[datetime] = None,
 ) -> tuple[ExportResult, StudySessionState]:
@@ -338,6 +348,8 @@ def session_start(
         output_dir=output_dir,
         append=False,
         overwrite=overwrite,
+        allow_empty_characters=allow_empty_characters,
+        debug_json=debug_json,
         dry_run=dry_run,
         metadata=metadata,
     )
@@ -378,6 +390,8 @@ def checkpoint_export(
     notes: str = "",
     playtime_minutes: Optional[int] = None,
     tags: Optional[list[str]] = None,
+    allow_empty_characters: bool = False,
+    debug_json: bool = False,
     dry_run: bool = False,
 ) -> tuple[ExportResult, StudySessionState]:
     state = _require_active_state(config)
@@ -398,6 +412,8 @@ def checkpoint_export(
         output_dir=Path(state.export_dir),
         append=True,
         overwrite=False,
+        allow_empty_characters=allow_empty_characters,
+        debug_json=debug_json,
         dry_run=dry_run,
         metadata=metadata,
     )
@@ -421,6 +437,8 @@ def milestone_export(
     tags: list[str],
     notes: str = "",
     playtime_minutes: Optional[int] = None,
+    allow_empty_characters: bool = False,
+    debug_json: bool = False,
     dry_run: bool = False,
 ) -> tuple[ExportResult, StudySessionState]:
     state = _require_active_state(config)
@@ -441,6 +459,8 @@ def milestone_export(
         output_dir=Path(state.export_dir),
         append=True,
         overwrite=False,
+        allow_empty_characters=allow_empty_characters,
+        debug_json=debug_json,
         dry_run=dry_run,
         metadata=metadata,
     )
@@ -464,6 +484,8 @@ def session_end(
     notes: str = "",
     playtime_minutes: Optional[int] = None,
     tags: Optional[list[str]] = None,
+    allow_empty_characters: bool = False,
+    debug_json: bool = False,
     dry_run: bool = False,
 ) -> tuple[ExportResult, StudySessionState]:
     state = _require_active_state(config)
@@ -484,6 +506,8 @@ def session_end(
         output_dir=Path(state.export_dir),
         append=True,
         overwrite=False,
+        allow_empty_characters=allow_empty_characters,
+        debug_json=debug_json,
         dry_run=dry_run,
         metadata=metadata,
     )

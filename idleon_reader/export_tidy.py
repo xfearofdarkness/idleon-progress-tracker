@@ -213,6 +213,7 @@ class ExportResult:
     manifest_path: Optional[Path]
     study_metadata: dict[str, Any]
     backup: Optional[dict[str, Any]] = None
+    debug_json_path: Optional[Path] = None
 
 
 def make_snapshot_id(timestamp: str, source_path: str = "") -> str:
@@ -723,12 +724,24 @@ def _remove_export_artifacts(output_dir: Path) -> None:
     if manifest_dir.exists():
         shutil.rmtree(manifest_dir)
 
+    debug_dir = output_dir / "debug_raw"
+    if debug_dir.exists():
+        shutil.rmtree(debug_dir)
+
+
+def _write_debug_json(output_dir: Path, snapshot_id: str, data: dict[str, Any]) -> Path:
+    debug_path = output_dir / "debug_raw" / f"{snapshot_id}.json"
+    debug_path.parent.mkdir(parents=True, exist_ok=True)
+    debug_path.write_text(json.dumps(data, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    return debug_path
+
 
 def _validate_tables(
     tables: dict[str, list[dict]],
     snapshot_id: str,
     output_dir: Path,
     append: bool,
+    allow_empty_characters: bool,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     results: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -789,6 +802,22 @@ def _validate_tables(
         duplicates=duplicate_details,
     )
 
+    has_characters = bool(tables.get("characters"))
+    _record_validation(
+        results,
+        "characters_present",
+        has_characters or allow_empty_characters,
+        (
+            "characters.csv contains character rows."
+            if has_characters
+            else (
+                "characters.csv ist leer, wurde aber explizit erlaubt."
+                if allow_empty_characters
+                else "characters.csv ist leer; pruefe Save-Pfad, Save-Account oder nutze --debug-json."
+            )
+        ),
+    )
+
     if append and output_dir.exists():
         existing_files = [output_dir / f"{table_name}.csv" for table_name in TABLE_ORDER if (output_dir / f"{table_name}.csv").exists()]
         if existing_files:
@@ -842,7 +871,7 @@ def _validate_tables(
                 duplicates=duplicated_header_rows,
             )
 
-    if not tables.get("characters"):
+    if not tables.get("characters") and allow_empty_characters:
         warnings.append("characters.csv ist leer; pruefe, ob der richtige Save geladen wurde.")
 
     if not tables.get("account_metrics"):
@@ -905,12 +934,16 @@ def export_tidy_csvs(
     source_path: str = "",
     append: bool = False,
     overwrite: bool = False,
+    allow_empty_characters: bool = False,
+    debug_json: bool = False,
     timestamp: Optional[str] = None,
     metadata: Optional[dict[str, Any]] = None,
     dry_run: bool = False,
 ) -> ExportResult:
     if append and overwrite:
         raise ValueError("append und overwrite koennen nicht gleichzeitig aktiv sein")
+    if dry_run and debug_json:
+        raise ValueError("debug_json kann nicht zusammen mit dry_run verwendet werden")
 
     if timestamp is None:
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -927,13 +960,23 @@ def export_tidy_csvs(
     table_row_counts = {table_name: len(tables[table_name]) for table_name in TABLE_ORDER}
     paths = {table_name: output_dir / f"{table_name}.csv" for table_name in TABLE_ORDER}
 
-    validation_results, warnings = _validate_tables(tables, snapshot_id, output_dir, append=effective_append)
+    validation_results, warnings = _validate_tables(
+        tables,
+        snapshot_id,
+        output_dir,
+        append=effective_append,
+        allow_empty_characters=allow_empty_characters,
+    )
     manifest_path = None
+    debug_json_path = None
 
     if not dry_run:
         output_dir.mkdir(parents=True, exist_ok=True)
         if export_mode == "overwrite":
             _remove_export_artifacts(output_dir)
+
+        if debug_json:
+            debug_json_path = _write_debug_json(output_dir, snapshot_id, data)
 
         if export_mode == "append":
             previous_counts = {table_name: _count_csv_rows(paths[table_name]) for table_name in TABLE_ORDER}
@@ -964,6 +1007,7 @@ def export_tidy_csvs(
             "validation": validation_results,
             "warnings": warnings,
             "success": True,
+            "debug_json_path": str(debug_json_path) if debug_json_path else "",
         }
         _write_manifest(manifest_path, manifest)
 
@@ -981,6 +1025,7 @@ def export_tidy_csvs(
         warnings=warnings,
         manifest_path=manifest_path,
         study_metadata=metadata,
+        debug_json_path=debug_json_path,
     )
 
 

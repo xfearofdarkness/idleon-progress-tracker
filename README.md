@@ -55,6 +55,13 @@ python -m idleon_reader --list-save-accounts
 python -m idleon_reader --save-account mySave --csv exports/latest
 ```
 
+Wenn keine Charaktere erkannt werden, stoppt der CSV-Export standardmäßig.
+Für denselben Lesevorgang zusätzlich den Rohsave sichern:
+
+```bash
+python -m idleon_reader --save-account mySave --csv exports/latest --debug-json
+```
+
 ## Study-Workflow
 
 `study init-config` legt die lokalen Konfigurationsdateien an:

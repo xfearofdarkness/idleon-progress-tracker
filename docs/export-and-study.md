@@ -30,6 +30,19 @@ Dry-Run:
 python -m idleon_reader --csv exports/latest --dry-run
 ```
 
+Wenn keine Charaktere erkannt werden, stoppt der CSV-Export standardmäßig mit einem Validierungsfehler.
+Zum Vergleich desselben Reads kann zusaetzlich ein Debug-JSON geschrieben werden:
+
+```bash
+python -m idleon_reader --csv exports/latest --debug-json
+```
+
+Nur wenn ein leerer Charakterzustand bewusst exportiert werden soll:
+
+```bash
+python -m idleon_reader --csv exports/latest --allow-empty-characters
+```
+
 Explizit an denselben Exportordner anhängen:
 
 ```bash
@@ -135,6 +148,19 @@ python -m idleon_reader study checkpoint --playtime-minutes 30
 python -m idleon_reader study milestone --tag reached_level_10 --playtime-minutes 45
 python -m idleon_reader study session-end --playtime-minutes 60
 python -m idleon_reader study status
+```
+
+Fuer Problemfaelle kann derselbe eingelesene Save zusaetzlich als Debug-JSON geschrieben werden:
+
+```bash
+python -m idleon_reader study checkpoint --debug-json
+```
+
+Ein leerer Charakterzustand wird auch im Study-Workflow standardmaessig blockiert.
+Nur fuer bewusste Ausnahmen:
+
+```bash
+python -m idleon_reader study checkpoint --allow-empty-characters
 ```
 
 Wenn ein Account-Verlauf bewusst neu aufgebaut werden soll:

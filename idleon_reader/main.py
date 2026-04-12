@@ -126,6 +126,16 @@ def create_parser() -> argparse.ArgumentParser:
         help="Baue den CSV-Export in-memory und pruefe ihn, ohne Dateien zu schreiben",
     )
     parser.add_argument(
+        "--debug-json",
+        action="store_true",
+        help="Schreibe fuer --csv denselben eingelesenen Save zusaetzlich nach debug_raw/<snapshot_id>.json",
+    )
+    parser.add_argument(
+        "--allow-empty-characters",
+        action="store_true",
+        help="Erlaube einen CSV-Export auch dann, wenn keine Charaktere erkannt wurden",
+    )
+    parser.add_argument(
         "--account-label",
         type=str,
         default="",
@@ -309,6 +319,8 @@ def cmd_read(args):
         args.append,
         args.overwrite,
         args.dry_run,
+        args.debug_json,
+        args.allow_empty_characters,
         args.account_label,
         args.study_group,
         args.session_id,
@@ -346,6 +358,8 @@ def cmd_read(args):
                 source_path=source,
                 append=args.append,
                 overwrite=args.overwrite,
+                allow_empty_characters=args.allow_empty_characters,
+                debug_json=args.debug_json,
                 metadata=metadata,
                 dry_run=args.dry_run,
             )
@@ -425,6 +439,8 @@ def _print_export_summary(result):
         print(f"[*] Dokumentation: {result.output_dir}/data_dictionary.csv")
         if result.manifest_path:
             print(f"[*] Manifest:      {result.manifest_path}")
+        if result.debug_json_path:
+            print(f"[*] Debug-JSON:    {result.debug_json_path}")
 
     if result.warnings:
         print("[*] Warnungen:")

@@ -247,6 +247,19 @@ def test_baseline_export_writes_without_session_state(tmp_path, monkeypatch):
     assert (tmp_path / "exports" / "study" / "speed_run" / "snapshots.csv").exists()
 
 
+def test_baseline_export_can_write_debug_json(tmp_path, monkeypatch):
+    fake_save = tmp_path / "fake-save"
+    fake_save.mkdir()
+    _write_study_files(tmp_path, fake_save)
+    config = load_study_config(tmp_path)
+
+    monkeypatch.setattr("idleon_reader.study_session.read_save_data", lambda _path: _sample_save_data())
+
+    result = baseline_export(config, account_name="speed_run", tags=["baseline"], debug_json=True)
+    assert result.debug_json_path is not None
+    assert result.debug_json_path.exists()
+
+
 def test_baseline_export_defaults_to_append_on_existing_history(tmp_path, monkeypatch):
     fake_save = tmp_path / "fake-save"
     fake_save.mkdir()
