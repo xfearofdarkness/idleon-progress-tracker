@@ -36,6 +36,8 @@ class StudyConfig:
     default_profile: str
     default_save_path: str
     default_save_account: str
+    backup_root: str
+    include_local_config_in_backup: bool
     accounts: dict[str, StudyAccountProfile]
     profiles_path: Path
     local_path: Path
@@ -68,6 +70,27 @@ DEFAULT_ALLOWED_RUN_TYPES = ("baseline", "checkpoint", "session_end", "milestone
 def repo_root_from_path(start: Optional[Path] = None) -> Path:
     base = start if start is not None else Path(__file__).resolve().parent.parent
     return base.resolve()
+
+
+def default_backup_root() -> Path:
+    return (Path.home() / "IdleonTrackerBackups").resolve()
+
+
+def _resolve_backup_root(raw_value: str, repo_root: Path) -> Path:
+    if raw_value.strip():
+        candidate = Path(raw_value).expanduser()
+        if not candidate.is_absolute():
+            candidate = (repo_root / candidate).resolve()
+        else:
+            candidate = candidate.resolve()
+    else:
+        candidate = default_backup_root()
+
+    try:
+        candidate.relative_to(repo_root)
+    except ValueError:
+        return candidate
+    raise StudyConfigError("backup.root darf nicht innerhalb des Repo-Ordners liegen.")
 
 
 def profiles_template() -> str:
@@ -130,6 +153,11 @@ def local_template() -> str:
 # [accounts.account_1]
 # save_path = "/absolute/path/to/leveldb"
 # save_selector = "mySave"
+#
+# Optional local backup settings:
+# [backup]
+# root = "~/IdleonTrackerBackups"
+# include_local_config = true
 """
 
 
@@ -230,6 +258,12 @@ def load_study_config(repo_root: Optional[Path] = None) -> StudyConfig:
     default_save_account = str(
         local_defaults.get("save_selector", "") or local_defaults.get("save_account", "")
     ).strip()
+    backup_data = local_data.get("backup") if isinstance(local_data.get("backup"), dict) else {}
+    raw_backup_root = str(backup_data.get("root", "")).strip()
+    include_local_config = backup_data.get("include_local_config", True)
+    if not isinstance(include_local_config, bool):
+        raise StudyConfigError("backup.include_local_config muss true oder false sein.")
+    backup_root = _resolve_backup_root(raw_backup_root, root)
 
     if default_profile and default_profile not in accounts:
         raise StudyConfigError(f"Profil '{default_profile}' ist nicht in study_profiles.toml definiert.")
@@ -244,6 +278,8 @@ def load_study_config(repo_root: Optional[Path] = None) -> StudyConfig:
         default_profile=default_profile,
         default_save_path=default_save_path,
         default_save_account=default_save_account,
+        backup_root=str(backup_root),
+        include_local_config_in_backup=include_local_config,
         accounts=accounts,
         profiles_path=profiles_path,
         local_path=local_path,
@@ -256,3 +292,11 @@ def resolve_account(config: StudyConfig, account_name: str) -> StudyAccountProfi
     except KeyError as exc:
         known = ", ".join(sorted(config.accounts))
         raise StudyConfigError(f"Unbekannter Account '{account_name}'. Verfuegbar: {known}") from exc
+
+
+def resolve_account_name_by_label(config: StudyConfig, account_label: str) -> str:
+    for profile_name, profile in config.accounts.items():
+        if profile.account_label == account_label:
+            return profile_name
+    known = ", ".join(sorted(profile.account_label for profile in config.accounts.values()))
+    raise StudyConfigError(f"Unbekanntes Account-Label '{account_label}'. Verfuegbar: {known}")

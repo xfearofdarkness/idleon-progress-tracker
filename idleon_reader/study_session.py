@@ -14,7 +14,20 @@ from .export_tidy import ExportResult, export_tidy_csvs
 from .finder import find_save_directory
 from .ldb_reader import read_save_data
 from .save_accounts import SaveAccountSelectionError, select_save_account
-from .study_config import StudyAccountProfile, StudyConfig, StudyConfigError, resolve_account
+from .study_backup import (
+    BackupRecord,
+    StudyBackupError,
+    create_backup_from_latest_export,
+    create_study_backup,
+    update_export_manifest_backup_status,
+)
+from .study_config import (
+    StudyAccountProfile,
+    StudyConfig,
+    StudyConfigError,
+    resolve_account,
+    resolve_account_name_by_label,
+)
 
 
 class StudySessionError(RuntimeError):
@@ -97,6 +110,10 @@ def save_account_for_account(config: StudyConfig, account: StudyAccountProfile, 
     return (override or account.save_account or config.default_save_account).strip()
 
 
+def session_state_path(repo_root: Path) -> Path:
+    return state_path(repo_root)
+
+
 def _read_session_ids(snapshots_csv: Path) -> list[str]:
     if not snapshots_csv.exists():
         return []
@@ -148,6 +165,7 @@ def _perform_export(
     save_account: str,
     output_dir: Path,
     append: bool,
+    overwrite: bool,
     dry_run: bool,
     metadata: dict,
 ) -> tuple[ExportResult, str]:
@@ -171,11 +189,68 @@ def _perform_export(
         output_dir=output_dir,
         source_path=str(save_path),
         append=append,
+        overwrite=overwrite,
         dry_run=dry_run,
         metadata=metadata,
     )
     resolved_selector = selected_candidate.selector if selected_candidate is not None else save_account.strip()
     return result, resolved_selector
+
+
+def _attach_backup_status(result: ExportResult, backup_status: dict[str, object]) -> None:
+    result.backup = backup_status
+    try:
+        update_export_manifest_backup_status(result.manifest_path, backup_status)
+    except Exception as exc:
+        result.backup = {
+            **backup_status,
+            "manifest_error": str(exc),
+        }
+
+
+def _backup_success_dict(record, attempted: bool = True) -> dict[str, object]:
+    return {
+        "attempted": attempted,
+        "success": True,
+        "archive_path": str(record.archive_path),
+        "created_at": record.created_at,
+        "size_bytes": record.size_bytes,
+    }
+
+
+def _backup_failure_dict(error: Exception, attempted: bool = True) -> dict[str, object]:
+    return {
+        "attempted": attempted,
+        "success": False,
+        "error": str(error),
+    }
+
+
+def _run_automatic_backup(
+    *,
+    config: StudyConfig,
+    account: StudyAccountProfile,
+    result: ExportResult,
+    session_state_file: Optional[Path],
+) -> None:
+    if result.dry_run:
+        result.backup = {"attempted": False, "success": False}
+        return
+
+    try:
+        record = create_study_backup(
+            config=config,
+            account=account,
+            export_dir=result.output_dir,
+            snapshot_id=result.snapshot_id,
+            run_type=result.study_metadata.get("run_type", ""),
+            study_group=result.study_metadata.get("study_group", ""),
+            session_id=result.study_metadata.get("session_id", ""),
+            session_state_path=session_state_file,
+        )
+        _attach_backup_status(result, _backup_success_dict(record))
+    except StudyBackupError as exc:
+        _attach_backup_status(result, _backup_failure_dict(exc))
 
 
 def baseline_export(
@@ -188,6 +263,7 @@ def baseline_export(
     save_account_override: str = "",
     output_dir_override: str = "",
     study_group_override: str = "",
+    overwrite: bool = False,
     dry_run: bool = False,
 ) -> ExportResult:
     account = resolve_account(config, account_name)
@@ -210,8 +286,15 @@ def baseline_export(
         save_account=save_account,
         output_dir=output_dir,
         append=False,
+        overwrite=overwrite,
         dry_run=dry_run,
         metadata=metadata,
+    )
+    _run_automatic_backup(
+        config=config,
+        account=account,
+        result=result,
+        session_state_file=None,
     )
     return result
 
@@ -226,6 +309,7 @@ def session_start(
     save_account_override: str = "",
     output_dir_override: str = "",
     study_group_override: str = "",
+    overwrite: bool = False,
     dry_run: bool = False,
     now: Optional[datetime] = None,
 ) -> tuple[ExportResult, StudySessionState]:
@@ -253,6 +337,7 @@ def session_start(
         save_account=save_account,
         output_dir=output_dir,
         append=False,
+        overwrite=overwrite,
         dry_run=dry_run,
         metadata=metadata,
     )
@@ -271,6 +356,12 @@ def session_start(
     )
     if not dry_run:
         save_session_state(config.repo_root, state)
+    _run_automatic_backup(
+        config=config,
+        account=account,
+        result=result,
+        session_state_file=None if dry_run else session_state_path(config.repo_root),
+    )
     return result, state
 
 
@@ -306,6 +397,7 @@ def checkpoint_export(
         save_account=state.save_account,
         output_dir=Path(state.export_dir),
         append=True,
+        overwrite=False,
         dry_run=dry_run,
         metadata=metadata,
     )
@@ -313,6 +405,13 @@ def checkpoint_export(
     state.last_snapshot_id = result.snapshot_id
     if not dry_run:
         save_session_state(config.repo_root, state)
+    account = resolve_account(config, resolve_account_name_by_label(config, state.account_label))
+    _run_automatic_backup(
+        config=config,
+        account=account,
+        result=result,
+        session_state_file=None if dry_run else session_state_path(config.repo_root),
+    )
     return result, state
 
 
@@ -341,6 +440,7 @@ def milestone_export(
         save_account=state.save_account,
         output_dir=Path(state.export_dir),
         append=True,
+        overwrite=False,
         dry_run=dry_run,
         metadata=metadata,
     )
@@ -348,6 +448,13 @@ def milestone_export(
     state.last_snapshot_id = result.snapshot_id
     if not dry_run:
         save_session_state(config.repo_root, state)
+    account = resolve_account(config, resolve_account_name_by_label(config, state.account_label))
+    _run_automatic_backup(
+        config=config,
+        account=account,
+        result=result,
+        session_state_file=None if dry_run else session_state_path(config.repo_root),
+    )
     return result, state
 
 
@@ -376,6 +483,7 @@ def session_end(
         save_account=state.save_account,
         output_dir=Path(state.export_dir),
         append=True,
+        overwrite=False,
         dry_run=dry_run,
         metadata=metadata,
     )
@@ -383,7 +491,36 @@ def session_end(
     state.last_snapshot_id = result.snapshot_id
     if not dry_run:
         clear_session_state(config.repo_root)
+    account = resolve_account(config, resolve_account_name_by_label(config, state.account_label))
+    _run_automatic_backup(
+        config=config,
+        account=account,
+        result=result,
+        session_state_file=None,
+    )
     return result, state
+
+
+def backup_now(
+    config: StudyConfig,
+    *,
+    account_name: str,
+    include_local_config: Optional[bool] = None,
+) -> BackupRecord:
+    account = resolve_account(config, account_name)
+    export_dir = export_dir_for_account(config, account)
+    active_state = load_session_state(config.repo_root)
+    session_file = None
+    if active_state is not None and active_state.account_label == account.account_label:
+        session_file = session_state_path(config.repo_root)
+        export_dir = Path(active_state.export_dir)
+    return create_backup_from_latest_export(
+        config=config,
+        account=account,
+        export_dir=export_dir,
+        include_local_config=include_local_config,
+        session_state_path=session_file,
+    )
 
 
 def study_status(config: StudyConfig) -> StudyStatus:

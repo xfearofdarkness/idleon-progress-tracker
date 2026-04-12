@@ -13,6 +13,7 @@ import hashlib
 import io
 import json
 import platform
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -202,6 +203,7 @@ class ExportResult:
     timestamp: str
     output_dir: Path
     source_path: str
+    mode: str
     append: bool
     dry_run: bool
     paths: dict[str, Path]
@@ -210,6 +212,7 @@ class ExportResult:
     warnings: list[str]
     manifest_path: Optional[Path]
     study_metadata: dict[str, Any]
+    backup: Optional[dict[str, Any]] = None
 
 
 def make_snapshot_id(timestamp: str, source_path: str = "") -> str:
@@ -702,6 +705,25 @@ def _count_csv_rows(filepath: Path) -> int:
         return max(sum(1 for _ in handle) - 1, 0)
 
 
+def _dataset_exists(output_dir: Path) -> bool:
+    return any((output_dir / f"{table_name}.csv").exists() for table_name in TABLE_ORDER)
+
+
+def _remove_export_artifacts(output_dir: Path) -> None:
+    for table_name in TABLE_ORDER:
+        filepath = output_dir / f"{table_name}.csv"
+        if filepath.exists():
+            filepath.unlink()
+
+    dictionary_path = output_dir / "data_dictionary.csv"
+    if dictionary_path.exists():
+        dictionary_path.unlink()
+
+    manifest_dir = output_dir / "run_manifests"
+    if manifest_dir.exists():
+        shutil.rmtree(manifest_dir)
+
+
 def _validate_tables(
     tables: dict[str, list[dict]],
     snapshot_id: str,
@@ -882,15 +904,22 @@ def export_tidy_csvs(
     output_dir: Path,
     source_path: str = "",
     append: bool = False,
+    overwrite: bool = False,
     timestamp: Optional[str] = None,
     metadata: Optional[dict[str, Any]] = None,
     dry_run: bool = False,
 ) -> ExportResult:
+    if append and overwrite:
+        raise ValueError("append und overwrite koennen nicht gleichzeitig aktiv sein")
+
     if timestamp is None:
         timestamp = datetime.now(timezone.utc).isoformat()
 
     output_dir = Path(output_dir)
     metadata = _normalize_study_metadata(metadata)
+    dataset_exists = _dataset_exists(output_dir)
+    effective_append = append or (dataset_exists and not overwrite)
+    export_mode = "append" if effective_append else ("overwrite" if overwrite else "write")
 
     snapshot_id = make_snapshot_id(timestamp, source_path)
     snapshot_row = _build_snapshot_row(snapshot_id, timestamp, source_path, metadata)
@@ -898,16 +927,22 @@ def export_tidy_csvs(
     table_row_counts = {table_name: len(tables[table_name]) for table_name in TABLE_ORDER}
     paths = {table_name: output_dir / f"{table_name}.csv" for table_name in TABLE_ORDER}
 
-    validation_results, warnings = _validate_tables(tables, snapshot_id, output_dir, append=append)
+    validation_results, warnings = _validate_tables(tables, snapshot_id, output_dir, append=effective_append)
     manifest_path = None
 
     if not dry_run:
         output_dir.mkdir(parents=True, exist_ok=True)
-        previous_counts = {table_name: _count_csv_rows(paths[table_name]) for table_name in TABLE_ORDER}
+        if export_mode == "overwrite":
+            _remove_export_artifacts(output_dir)
+
+        if export_mode == "append":
+            previous_counts = {table_name: _count_csv_rows(paths[table_name]) for table_name in TABLE_ORDER}
+        else:
+            previous_counts = {table_name: 0 for table_name in TABLE_ORDER}
 
         for table_name in TABLE_ORDER:
             fieldnames = _expected_fieldnames(table_name)
-            _write_csv(tables[table_name], paths[table_name], append=append, fieldnames=fieldnames)
+            _write_csv(tables[table_name], paths[table_name], append=effective_append, fieldnames=fieldnames)
 
         _write_dataset_dictionary(output_dir)
         validation_results.extend(_validate_written_row_counts(output_dir, table_row_counts, previous_counts))
@@ -917,7 +952,7 @@ def export_tidy_csvs(
             "snapshot_id": snapshot_id,
             "timestamp": timestamp,
             "export_dir": str(output_dir),
-            "mode": "append" if append else "write",
+            "mode": export_mode,
             "source_path": source_path,
             "platform": snapshot_row["platform"],
             "python_version": sys.version.split()[0],
@@ -937,7 +972,8 @@ def export_tidy_csvs(
         timestamp=timestamp,
         output_dir=output_dir,
         source_path=source_path,
-        append=append,
+        mode=export_mode,
+        append=effective_append,
         dry_run=dry_run,
         paths=paths,
         table_row_counts=table_row_counts,

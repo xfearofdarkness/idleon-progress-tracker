@@ -41,6 +41,13 @@ Standard-Export:
 python -m idleon_reader --csv exports/latest
 ```
 
+Wenn der Ordner bereits Exportdateien enthält, wird der nächste Snapshot standardmäßig angehängt.
+Nur für einen bewussten Neuaufbau desselben Ordners:
+
+```bash
+python -m idleon_reader --csv exports/latest --overwrite
+```
+
 Wenn ein Save mehrere logische Accounts enthält:
 
 ```bash
@@ -63,6 +70,9 @@ Minimales lokales Beispiel:
 profile = "account_1"
 save_path = "/absolute/path/to/leveldb"
 save_selector = "mySave"
+
+[backup]
+root = "/absolute/path/outside/repo"
 ```
 
 Danach funktionieren die einfachen Study-Kommandos ohne lange Flag-Ketten:
@@ -72,6 +82,14 @@ python -m idleon_reader study baseline --tag baseline
 python -m idleon_reader study session-start
 python -m idleon_reader study checkpoint --playtime-minutes 30
 python -m idleon_reader study session-end --playtime-minutes 60
+```
+
+Nach jedem erfolgreichen Study-Export wird automatisch ein ZIP-Backup außerhalb des Repos geschrieben.
+Ein bestehendes Backup kann manuell angezeigt oder wiederhergestellt werden:
+
+```bash
+python -m idleon_reader study list-backups
+python -m idleon_reader study restore-backup /path/to/archive.zip
 ```
 
 ## Weiterführende Doku

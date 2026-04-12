@@ -9,3 +9,11 @@
 # 1. Run: python -m idleon_reader --list-save-accounts
 # 2. Copy the selector from the first column
 # save_selector = "mySave"
+
+[backup]
+# Optional local backup target outside the repo
+# root = "~/IdleonTrackerBackups"
+
+# study_local.toml is included in backups by default.
+# Set to false if you do not want local paths/selectors in the archive.
+# include_local_config = true

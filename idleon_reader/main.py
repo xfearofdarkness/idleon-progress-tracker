@@ -109,10 +109,16 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Zeige erkannte Save-Accounts im LevelDB-Save an und beende das Programm",
     )
-    parser.add_argument(
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
         "--append",
         action="store_true",
-        help="An bestehende CSVs anhaengen statt ueberschreiben (fuer Zeitreihen)",
+        help="Explizit an einen vorhandenen CSV-Verlauf anhaengen",
+    )
+    mode_group.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Vorhandene Exportdateien in diesem Ordner bewusst ersetzen",
     )
     parser.add_argument(
         "--dry-run",
@@ -301,6 +307,7 @@ def cmd_read(args):
 
     export_flags_used = any([
         args.append,
+        args.overwrite,
         args.dry_run,
         args.account_label,
         args.study_group,
@@ -338,6 +345,7 @@ def cmd_read(args):
                 output_dir=args.csv,
                 source_path=source,
                 append=args.append,
+                overwrite=args.overwrite,
                 metadata=metadata,
                 dry_run=args.dry_run,
             )
@@ -397,11 +405,10 @@ def _write_output(content: str, output_path: Optional[Path] = None):
 
 
 def _print_export_summary(result):
-    mode = "dry-run" if result.dry_run else ("append" if result.append else "write")
     validation_ok = all(entry["passed"] for entry in result.validation)
 
     print(f"[*] Snapshot-ID: {result.snapshot_id}")
-    print(f"[*] Modus:       {mode}")
+    print(f"[*] Modus:       {'dry-run' if result.dry_run else result.mode}")
     print(f"[*] Exportpfad:  {result.output_dir}/")
     print(f"[*] Save-Pfad:   {result.source_path}")
     if result.study_metadata["account_label"]:
