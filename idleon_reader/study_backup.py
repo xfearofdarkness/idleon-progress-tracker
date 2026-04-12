@@ -165,6 +165,14 @@ def _build_archive_entries(
     return entries
 
 
+def _cleanup_stale_temp_archives(archive_dir: Path) -> None:
+    for path in archive_dir.glob(".backup-*.zip"):
+        try:
+            path.unlink()
+        except OSError:
+            continue
+
+
 def create_study_backup(
     *,
     config: StudyConfig,
@@ -185,6 +193,7 @@ def create_study_backup(
     date_token = created_at[:10]
     archive_dir = backup_root / account.account_label / year / date_token
     archive_dir.mkdir(parents=True, exist_ok=True)
+    _cleanup_stale_temp_archives(archive_dir)
 
     archive_name = (
         f"{_archive_timestamp(created_at)}__{account.account_label}__{run_type or 'unknown'}__{snapshot_id or 'unknown'}.zip"
@@ -313,6 +322,8 @@ def list_study_backups(config: StudyConfig, account_label: str = "") -> tuple[li
     records: list[BackupRecord] = []
     warnings: list[str] = []
     for archive_path in sorted(backup_root.rglob("*.zip"), reverse=True):
+        if archive_path.name.startswith(".backup-"):
+            continue
         try:
             manifest = _read_backup_manifest(archive_path)
             record = _backup_record_from_manifest(archive_path, manifest)

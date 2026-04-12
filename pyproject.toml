@@ -30,9 +30,6 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-# plyvel provides faster LevelDB access but requires C compilation.
-# The tool works without it using the built-in raw parser.
-fast = ["plyvel>=2.0.0"]
 dev = ["pytest>=7.0", "pytest-cov"]
 
 [project.scripts]

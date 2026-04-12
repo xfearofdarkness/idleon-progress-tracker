@@ -3,9 +3,8 @@ LevelDB Reader for IdleOn Save Data
 
 Reads the LevelDB database used by IdleOn (Electron app) to store local save data.
 Supports these strategies:
-  1. Using the `plyvel` library (fast, direct LevelDB access)
-  2. Using the `leveldbutil dump` CLI (reliable for Chromium/Electron LevelDB files)
-  3. Parsing LevelDB log files directly as a last-resort fallback
+  1. Using the `leveldbutil dump` CLI (reliable for Chromium/Electron LevelDB files)
+  2. Parsing LevelDB log files directly as a last-resort fallback
 
 The LevelDB key format for IdleOn is:
   _file://\\x00\\x01/<install_path>/resources/app.asar/distBuild/static/game/index.html:<key_name>
@@ -259,12 +258,16 @@ def read_with_leveldbutil(db_path: Path) -> dict[str, Any]:
     LevelDB files and works well on systems where `leveldbutil` is installed.
     """
     result = {}
+    attempted_files = 0
+    failed_files: list[tuple[str, str]] = []
 
     log_files = sorted(db_path.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
     for log_file in log_files:
+        attempted_files += 1
         try:
             entries = _iter_leveldbutil_entries(log_file)
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as exc:
+            failed_files.append((str(log_file.name), str(exc)))
             continue
         for action, key_str, value_str in entries:
             key_name = _normalize_key_name(key_str)
@@ -279,9 +282,11 @@ def read_with_leveldbutil(db_path: Path) -> dict[str, Any]:
 
     ldb_files = sorted(db_path.glob("*.ldb"), key=lambda p: p.stat().st_mtime, reverse=True)
     for ldb_file in ldb_files:
+        attempted_files += 1
         try:
             entries = _iter_leveldbutil_entries(ldb_file)
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as exc:
+            failed_files.append((str(ldb_file.name), str(exc)))
             continue
         for action, key_str, value_str in entries:
             if action != "put":
@@ -295,52 +300,18 @@ def read_with_leveldbutil(db_path: Path) -> dict[str, Any]:
             except (ValueError, SyntaxError):
                 continue
 
+    if not result and attempted_files and len(failed_files) == attempted_files:
+        sample = "; ".join(f"{name}: {message}" for name, message in failed_files[:3])
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=f"leveldbutil dump ({attempted_files} files)",
+            output=sample,
+        )
+
     return result
 
 
 # ─── High-Level Reader ──────────────────────────────────────────────────────
-
-
-def read_with_plyvel(db_path: Path, idleon_path: Optional[Path] = None) -> dict[str, Any]:
-    """
-    Read IdleOn save data using the plyvel library.
-
-    Args:
-        db_path: Path to the LevelDB directory.
-        idleon_path: Path to the IdleOn installation (for key construction).
-
-    Returns:
-        Dictionary of decoded save data.
-    """
-    import plyvel
-
-    db = plyvel.DB(str(db_path))
-    result = {}
-
-    try:
-        for key_bytes, value_bytes in db:
-            try:
-                key_str = key_bytes.decode("utf-8", errors="replace")
-                # Strip the LevelDB prefix format
-                # Keys look like: _file://\x00\x01/.../index.html:keyName
-                if ":" in key_str:
-                    key_name = key_str.split(":")[-1]
-                else:
-                    key_name = key_str
-
-                # Strip leading \x01 byte from value if present
-                value_str = value_bytes.decode("utf-8", errors="replace")
-                if value_str.startswith("\x01"):
-                    value_str = value_str[1:]
-
-                result[key_name] = try_decode_value(value_str)
-
-            except (UnicodeDecodeError, ValueError):
-                continue
-    finally:
-        db.close()
-
-    return result
 
 
 def read_raw(db_path: Path) -> dict[str, Any]:
@@ -388,7 +359,7 @@ def read_raw(db_path: Path) -> dict[str, Any]:
 
 def read_save_data(db_path: Path, idleon_path: Optional[Path] = None) -> dict[str, Any]:
     """
-    Read IdleOn save data, trying plyvel first and falling back to raw parsing.
+    Read IdleOn save data, preferring leveldbutil and falling back to raw parsing.
 
     Args:
         db_path: Path to the LevelDB directory.
@@ -397,22 +368,13 @@ def read_save_data(db_path: Path, idleon_path: Optional[Path] = None) -> dict[st
     Returns:
         Dictionary of decoded save data.
     """
-    # Try plyvel first
-    try:
-        import plyvel
-        print("[*] Using plyvel for LevelDB access...")
-        return read_with_plyvel(db_path, idleon_path)
-    except ImportError:
-        print("[*] plyvel not available.")
-    except Exception as e:
-        print(f"[!] plyvel failed ({e}).")
-
     # Try leveldbutil before the built-in raw parser
     try:
-        print("[*] Trying leveldbutil dump fallback...")
+        print("[*] Trying leveldbutil dump...")
         result = read_with_leveldbutil(db_path)
         if result:
             return result
+        print("[!] leveldbutil produced no decoded save entries, falling back to raw log parser...")
     except FileNotFoundError:
         print("[*] leveldbutil not available.")
     except subprocess.CalledProcessError as e:
