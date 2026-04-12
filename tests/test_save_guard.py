@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from idleon_reader.save_guard import SaveGuardError, ensure_save_ready, evaluate_save_health
+from idleon_reader.save_guard import (
+    SaveGuardError,
+    _matches_idleon_process,
+    ensure_save_ready,
+    evaluate_save_health,
+)
 
 
 def test_ensure_save_ready_requires_existing_directory(tmp_path):
@@ -34,6 +39,16 @@ def test_ensure_save_ready_rejects_changing_files(monkeypatch, tmp_path):
 
     with pytest.raises(SaveGuardError, match="verändern sich noch|veraendern sich noch"):
         ensure_save_ready(tmp_path, stability_wait_seconds=0)
+
+
+def test_matches_idleon_process_ignores_tracker_cli():
+    assert _matches_idleon_process("python.exe -m idleon_reader --list-save-accounts") is False
+    assert _matches_idleon_process("python.exe C:\\src\\idleon-progress-tracker\\tool.py") is False
+
+
+def test_matches_idleon_process_accepts_real_game_signatures():
+    assert _matches_idleon_process("LegendsOfIdleon.exe") is True
+    assert _matches_idleon_process("wine64 C:\\Games\\Legends of Idleon\\LegendsOfIdleon.exe") is True
 
 
 def test_evaluate_save_health_accepts_plausible_save():

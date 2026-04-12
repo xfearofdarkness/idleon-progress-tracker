@@ -44,10 +44,18 @@ def _snapshot_files(db_path: Path) -> tuple[tuple[str, int, int], ...]:
 
 def _matches_idleon_process(haystack: str) -> bool:
     text = haystack.lower()
+    ignored_tokens = (
+        "idleon_reader",
+        "idleon-progress-tracker",
+    )
+    if any(token in text for token in ignored_tokens):
+        return False
+
     tokens = (
         "idleon",
         "legends-of-idleon",
         "legends of idleon",
+        "legendsofidleon.exe",
     )
     return any(token in text for token in tokens)
 
