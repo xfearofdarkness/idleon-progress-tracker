@@ -67,3 +67,70 @@ def test_read_raw_can_recover_my_save_from_ldb_heuristic(tmp_path):
     assert "mySave" in result
     assert result["mySave"]["Money"] == 123
     assert "Alpha" in result["mySave"]["PlayerDATABASE"]
+
+
+def test_read_raw_prefers_newer_log_values(tmp_path, monkeypatch):
+    older = tmp_path / "000003.log"
+    newer = tmp_path / "000004.log"
+    older.write_bytes(b"old")
+    newer.write_bytes(b"new")
+    older.touch()
+    newer.touch()
+
+    monkeypatch.setattr(
+        ldb_reader,
+        "_parse_log_records",
+        lambda path: [path.name.encode("utf-8")],
+    )
+    monkeypatch.setattr(
+        ldb_reader,
+        "_parse_write_batch",
+        lambda record: [(b"foo", b"old")] if b"000003.log" in record else [(b"foo", b"new")],
+    )
+    monkeypatch.setattr(ldb_reader, "try_decode_value", lambda value: value)
+
+    result = ldb_reader.read_raw(tmp_path)
+
+    assert result["foo"] == "new"
+
+
+def test_read_raw_keeps_fuller_my_save_when_newer_decode_is_degraded(tmp_path, monkeypatch):
+    older = tmp_path / "000003.ldb"
+    newer = tmp_path / "000004.log"
+    older.write_bytes(b"old")
+    newer.write_bytes(b"new")
+    older.touch()
+    newer.touch()
+
+    monkeypatch.setattr(
+        ldb_reader,
+        "_read_ldb_file",
+        lambda path: [(b"mySave", b"full")] if path.name == "000003.ldb" else [],
+    )
+    monkeypatch.setattr(
+        ldb_reader,
+        "_parse_log_records",
+        lambda path: [path.name.encode("utf-8")],
+    )
+    monkeypatch.setattr(
+        ldb_reader,
+        "_parse_write_batch",
+        lambda record: [(b"mySave", b"partial")] if b"000004.log" in record else [],
+    )
+    monkeypatch.setattr(
+        ldb_reader,
+        "try_decode_value",
+        lambda value: (
+            {
+                "Money": 1,
+                "Cards": {},
+                "PlayerDATABASE": {"Alpha": {"CharacterClass": 1, "CurrentMap": 2, "Lv0": [1]}},
+            }
+            if value == "full"
+            else {"Money": 1, "PlayerDATABASE": {}}
+        ),
+    )
+
+    result = ldb_reader.read_raw(tmp_path)
+
+    assert "Alpha" in result["mySave"]["PlayerDATABASE"]

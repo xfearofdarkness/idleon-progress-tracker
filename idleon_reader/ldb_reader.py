@@ -240,6 +240,60 @@ def _decode_entry(key_str: str, value_str: str) -> tuple[str, Any]:
     return _normalize_key_name(key_str), try_decode_value(value_str)
 
 
+def _decoded_value_quality(value: Any) -> int:
+    """Score decoded save-like payloads so degraded reads do not overwrite fuller ones."""
+    if not isinstance(value, dict):
+        return 0
+
+    save = value.get("mySave", value) if isinstance(value.get("mySave"), dict) else value
+    if not isinstance(save, dict):
+        return 0
+
+    score = len(save)
+
+    player_db = save.get("PlayerDATABASE")
+    if isinstance(player_db, dict):
+        score += 20
+        score += len(player_db) * 10
+        for character in player_db.values():
+            if not isinstance(character, dict):
+                continue
+            score += sum(
+                2
+                for key in (
+                    "CharacterClass",
+                    "Lv0",
+                    "Exp0",
+                    "CurrentMap",
+                    "QuestStatus",
+                    "InventoryOrder",
+                )
+                if key in character
+            )
+
+    score += sum(
+        3
+        for key in ("Money", "GemsOwned", "Cards", "StarSignsUnlocked", "PlayerNames")
+        if key in save
+    )
+    return score
+
+
+def _merge_decoded_entry(result: dict[str, Any], key_name: str, decoded: Any) -> None:
+    """Merge a decoded entry while preferring fuller save payloads for duplicate keys."""
+    existing = result.get(key_name)
+    if existing is None:
+        result[key_name] = decoded
+        return
+
+    if key_name == "mySave":
+        if _decoded_value_quality(decoded) >= _decoded_value_quality(existing):
+            result[key_name] = decoded
+        return
+
+    result[key_name] = decoded
+
+
 def _iter_leveldbutil_entries(filepath: Path) -> list[tuple[str, str, Optional[str]]]:
     """
     Parse a file via `leveldbutil dump`.
@@ -306,7 +360,7 @@ def read_with_leveldbutil(db_path: Path) -> dict[str, Any]:
     attempted_files = 0
     failed_files: list[tuple[str, str]] = []
 
-    ldb_files = sorted(db_path.glob("*.ldb"), key=lambda p: p.stat().st_mtime, reverse=True)
+    ldb_files = sorted(db_path.glob("*.ldb"), key=lambda p: p.stat().st_mtime)
     for ldb_file in ldb_files:
         attempted_files += 1
         try:
@@ -317,12 +371,9 @@ def read_with_leveldbutil(db_path: Path) -> dict[str, Any]:
         for action, key_str, value_str in entries:
             if action != "put":
                 continue
-            key_name = _normalize_key_name(key_str)
-            if key_name in result:
-                continue
             try:
                 key_name, decoded = _decode_entry(key_str, value_str or "")
-                result[key_name] = decoded
+                _merge_decoded_entry(result, key_name, decoded)
             except (ValueError, SyntaxError):
                 continue
 
@@ -355,8 +406,22 @@ def read_raw(db_path: Path) -> dict[str, Any]:
     """
     result = {}
 
-    # Parse .log files (Write-Ahead Log - most recent data)
-    log_files = sorted(db_path.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+    # Parse .ldb files first. WAL logs are typically newer and should win afterwards.
+    ldb_files = sorted(db_path.glob("*.ldb"), key=lambda p: p.stat().st_mtime)
+    for ldb_file in ldb_files:
+        pairs = _read_ldb_file(ldb_file)
+        for key_bytes, value_bytes in pairs:
+            try:
+                key_str = key_bytes.decode("utf-8", errors="replace") if isinstance(key_bytes, bytes) else str(key_bytes)
+                value_str = value_bytes.decode("utf-8", errors="replace") if isinstance(value_bytes, bytes) else str(value_bytes)
+                if value_str.startswith("\x01"):
+                    value_str = value_str[1:]
+                _merge_decoded_entry(result, key_str, try_decode_value(value_str))
+            except (UnicodeDecodeError, ValueError):
+                continue
+
+    # Parse .log files (Write-Ahead Log - most recent data) last, oldest to newest.
+    log_files = sorted(db_path.glob("*.log"), key=lambda p: p.stat().st_mtime)
     for log_file in log_files:
         records = _parse_log_records(log_file)
         for record in records:
@@ -374,25 +439,10 @@ def read_raw(db_path: Path) -> dict[str, Any]:
                     if value_str.startswith("\x01"):
                         value_str = value_str[1:]
 
-                    result[key_name] = try_decode_value(value_str)
+                    _merge_decoded_entry(result, key_name, try_decode_value(value_str))
 
                 except (UnicodeDecodeError, ValueError):
                     continue
-
-    # Parse .ldb files (SSTables) with a heuristic scanner.
-    ldb_files = sorted(db_path.glob("*.ldb"), key=lambda p: p.stat().st_mtime, reverse=True)
-    for ldb_file in ldb_files:
-        pairs = _read_ldb_file(ldb_file)
-        for key_bytes, value_bytes in pairs:
-            try:
-                key_str = key_bytes.decode("utf-8", errors="replace") if isinstance(key_bytes, bytes) else str(key_bytes)
-                value_str = value_bytes.decode("utf-8", errors="replace") if isinstance(value_bytes, bytes) else str(value_bytes)
-                if value_str.startswith("\x01"):
-                    value_str = value_str[1:]
-                if key_str not in result:
-                    result[key_str] = try_decode_value(value_str)
-            except (UnicodeDecodeError, ValueError):
-                continue
 
     return result
 
