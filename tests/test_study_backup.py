@@ -196,7 +196,6 @@ def test_session_end_backup_excludes_current_session_file(tmp_path, monkeypatch)
     end_result, _state = session_end(
         config,
         notes="done",
-        playtime_minutes=10,
         tags=[],
     )
 

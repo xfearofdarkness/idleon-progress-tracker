@@ -380,7 +380,6 @@ def test_session_start_checkpoint_and_end_manage_state(tmp_path, monkeypatch):
     end_result, end_state = session_end(
         config,
         notes="finished",
-        playtime_minutes=45,
         tags=[],
     )
     assert end_result.study_metadata["run_type"] == "session_end"
@@ -482,7 +481,6 @@ def test_session_state_persists_selected_save_account(tmp_path, monkeypatch):
     end_result, end_state = session_end(
         config,
         notes="end session",
-        playtime_minutes=30,
         tags=[],
     )
     assert end_result.study_metadata["session_id"] == start_state.session_id

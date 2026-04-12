@@ -100,7 +100,7 @@ Danach funktionieren die einfachen Study-Kommandos ohne lange Flag-Ketten:
 ```bash
 python -m idleon_reader study baseline --tag baseline
 python -m idleon_reader study start
-python -m idleon_reader study end --playtime-minutes 60
+python -m idleon_reader study end
 ```
 
 Wichtig:

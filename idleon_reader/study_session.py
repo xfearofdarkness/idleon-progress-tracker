@@ -455,7 +455,6 @@ def session_end(
     config: StudyConfig,
     *,
     notes: str = "",
-    playtime_minutes: Optional[int] = None,
     tags: Optional[list[str]] = None,
     allow_empty_characters: bool = False,
     debug_json: bool = False,
@@ -471,7 +470,7 @@ def session_end(
         "run_type": "session_end",
         "strategy_label": state.strategy_label,
         "notes": notes,
-        "playtime_minutes_since_last_snapshot": "" if playtime_minutes is None else playtime_minutes,
+        "playtime_minutes_since_last_snapshot": "",
         "tags": ["session_end", *chosen_tags],
     }
     result, _resolved_save_account = _perform_export(

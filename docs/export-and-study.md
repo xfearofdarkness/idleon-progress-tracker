@@ -95,7 +95,6 @@ Wichtige Flags:
 - `--run-type`
 - `--strategy-label`
 - `--notes`
-- `--playtime-minutes`
 - `--tag` mehrfach wiederholbar
 
 Beispiel:
@@ -107,7 +106,6 @@ python -m idleon_reader --csv exports/study \
   --session-id s01 \
   --run-type baseline \
   --strategy-label speed \
-  --playtime-minutes 15 \
   --tag baseline
 ```
 
@@ -162,7 +160,7 @@ Einfache Study-Kommandos:
 ```bash
 python -m idleon_reader study baseline --tag baseline
 python -m idleon_reader study start
-python -m idleon_reader study end --playtime-minutes 60
+python -m idleon_reader study end
 python -m idleon_reader study status
 ```
 

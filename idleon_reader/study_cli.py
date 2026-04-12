@@ -93,7 +93,6 @@ def create_study_parser() -> argparse.ArgumentParser:
 def _add_shared_export_arguments(
     parser: argparse.ArgumentParser,
     *,
-    allow_playtime: bool = True,
     allow_save_path: bool = True,
     allow_save_account: bool = True,
     allow_output_dir: bool = True,
@@ -130,13 +129,6 @@ def _add_shared_export_arguments(
             "--overwrite",
             action="store_true",
             help="Vorhandene Exportdateien in diesem Account-Ordner bewusst ersetzen.",
-        )
-    if allow_playtime:
-        parser.add_argument(
-            "--playtime-minutes",
-            type=_non_negative_int,
-            default=None,
-            help="Geschaetzte Spielzeit seit dem letzten Snapshot in Minuten.",
         )
 
 
