@@ -64,12 +64,20 @@ def create_study_parser() -> argparse.ArgumentParser:
     _add_shared_export_arguments(baseline_parser, allow_playtime=False, allow_overwrite=True)
     baseline_parser.set_defaults(handler=cmd_baseline)
 
-    session_start_parser = subparsers.add_parser("session-start", help="Starte eine Session ohne Save-Export.")
+    session_start_parser = subparsers.add_parser(
+        "start",
+        aliases=["session-start"],
+        help="Starte eine Session ohne Save-Export.",
+    )
     session_start_parser.add_argument("--account", default="", help="Profilname aus study_profiles.toml.")
     _add_session_start_arguments(session_start_parser)
     session_start_parser.set_defaults(handler=cmd_session_start)
 
-    session_end_parser = subparsers.add_parser("session-end", help="Beende die aktive Session mit dem letzten Snapshot.")
+    session_end_parser = subparsers.add_parser(
+        "end",
+        aliases=["session-end"],
+        help="Beende die aktive Session mit dem letzten Snapshot.",
+    )
     _add_shared_export_arguments(
         session_end_parser,
         allow_save_path=False,
